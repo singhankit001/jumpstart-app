@@ -15,8 +15,9 @@ const hook = () => new Webhook((env('SEND_SMS_HOOK_SECRET') ?? '').replace(/^v1,
 const db = createClient(env('SUPABASE_URL')!, env('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } })
 
 // Supabase Auth gives a hook 5 seconds, counted from its side (network and start-up included); after that it throws the
-// code away even if WATI delivers it. The answer must leave by this point after the request arrives.
-const ANSWER_BY_MS = 4000
+// code away even if WATI delivers it. The answer must leave by this point after the request arrives: a cold start
+// takes about 2 seconds before this code runs (measured 2026-10-05), so this leaves room for it.
+const ANSWER_BY_MS = 2500
 // Supabase's runtime keeps the function alive for work handed to it after the response.
 const runtime = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime
 
