@@ -1,6 +1,6 @@
 // Supabase Auth's "Send SMS" hook: Supabase makes and checks the 6-digit code, this sends it on WhatsApp. Kept free of
 // Deno and npm imports so it can be tested; index.ts wires in the signature check, the database and WATI.
-import type { Wati, WatiFailure, WhatsAppLogRow } from '../_shared/wati.ts'
+import type { SendResult, Wati, WatiFailure, WhatsAppLogRow } from '../_shared/wati.ts'
 
 export interface Deps {
   /** Checks the Standard Webhooks signature and returns the hook's payload, or throws when it is not genuine. */
@@ -21,9 +21,8 @@ export interface Deps {
   /** Makes the id WATI reports back on; crypto.randomUUID in production. */
   newId?: () => string
   /**
-   * Keeps work going after the answer is sent (EdgeRuntime.waitUntil in production). Auth throws the code away if the
-   * hook takes over 5 seconds, even when WATI has already delivered it, so nothing after the send holds up the answer.
-   * Without it, the work is finished first.
+   * Keeps work going after the answer is sent (EdgeRuntime.waitUntil in production): the WhatsApp send and its log.
+   * Without it (tests, or a runtime that lacks it), the send is finished first and its result is the answer.
    */
   after?: (work: Promise<unknown>) => void
 }
@@ -73,16 +72,25 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   const localId = (deps.newId ?? (() => crypto.randomUUID()))()
   // Supabase sends the number as digits without the +, so it is already E.164 with its own country code.
   const digits = phone.replace(/^\+/, '')
-  // A log that can't be written must not stop a code from being sent.
-  await deps.log({ profileId, phone: digits, kind: 'signin_code', template: deps.template, localId, broadcastId: null, status: 'accepted', error: null }).catch(() => {})
-  const sent = await deps.wati.sendTemplate({ phone: `+${digits}`, template: deps.template, params: [otp], localMessageId: localId, broadcastName: 'signin_code' })
-  const finish = (async () => {
+  const delivery = (async (): Promise<SendResult> => {
+    // A log that can't be written must not stop a code from being sent.
+    await deps.log({ profileId, phone: digits, kind: 'signin_code', template: deps.template, localId, broadcastId: null, status: 'accepted', error: null }).catch(() => {})
+    const sent: SendResult = await deps.wati
+      .sendTemplate({ phone: `+${digits}`, template: deps.template, params: [otp], localMessageId: localId, broadcastName: 'signin_code' })
+      .catch(() => ({ ok: false, category: 'unavailable', retryable: true, localId }))
     // The failure category, and WATI's own reason when it gave one (masked, short), so a refusal can be fixed from the log.
     await deps.logDone(localId, sent.ok ? sent.broadcastId : null, sent.ok ? null : sent.detail ? `${sent.category}: ${sent.detail}` : sent.category).catch(() => {})
     if (!sent.ok) await deps.sendRefund(phone).catch(() => {})
+    return sent
   })()
-  if (deps.after) deps.after(finish)
-  else await finish
+  // In production WATI is never waited on: Auth keeps the code only if the hook answers within 5 seconds, and start-up,
+  // the checks above and WATI together can take longer. The code goes out moments after this answer. If WATI refuses
+  // it, the log says why and the place is given back, so "Send a new code" works.
+  if (deps.after) {
+    deps.after(delivery)
+    return json({})
+  }
+  const sent = await delivery
   if (sent.ok) return json({})
   return unavailable(BUSY.has(sent.category) ? 503 : 500)
 }

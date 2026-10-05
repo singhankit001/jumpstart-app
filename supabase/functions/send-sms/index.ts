@@ -14,32 +14,23 @@ const hook = () => new Webhook((env('SEND_SMS_HOOK_SECRET') ?? '').replace(/^v1,
 
 const db = createClient(env('SUPABASE_URL')!, env('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } })
 
-// Supabase Auth gives a hook 5 seconds, counted from its side (network and start-up included); after that it throws the
-// code away even if WATI delivers it. The answer must leave by this point after the request arrives: a cold start
-// takes about 2 seconds before this code runs (measured 2026-10-05), so this leaves room for it.
-const ANSWER_BY_MS = 2500
-// Supabase's runtime keeps the function alive for work handed to it after the response.
+// Supabase's runtime keeps the function alive for work handed to it after the response: the WhatsApp send runs there,
+// so Auth's 5-second limit on the hook never waits on WATI.
 const runtime = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime
 
 Deno.serve((req) => {
-  const arrived = Date.now()
-  // WATI gets whatever time is left, in one try: a slow send that cut off early may still be delivered, so it would come
-  // twice. A quick refusal (429 or 5xx) is retried only while time remains.
-  const wati = {
-    sendTemplate: (args: Parameters<ReturnType<typeof createWati>['sendTemplate']>[0]) => {
-      const left = Math.max(800, ANSWER_BY_MS - (Date.now() - arrived))
-      return createWati({
-        baseUrl: env('WATI_API_BASE_URL'),
-        token: env('WATI_API_TOKEN'),
-        channel: env('WATI_CHANNEL') || null,
-        budgetMs: left,
-        attemptTimeoutMs: left,
-        maxAttempts: 2,
-        fetch,
-        sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
-      }).sendTemplate(args)
-    },
-  }
+  const wati = createWati({
+    baseUrl: env('WATI_API_BASE_URL'),
+    token: env('WATI_API_TOKEN'),
+    channel: env('WATI_CHANNEL') || null,
+    // One try gets the whole 10 seconds: a slow send cut off early may still be delivered, and a retry would send the
+    // code twice. Only a quick refusal (429 or 5xx) is tried again.
+    budgetMs: 10_000,
+    attemptTimeoutMs: 10_000,
+    maxAttempts: 3,
+    fetch,
+    sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+  })
   return handle(req, {
     after: runtime ? (work) => runtime.waitUntil(work) : undefined,
     verify: (raw, headers) => hook().verify(raw, headers),
