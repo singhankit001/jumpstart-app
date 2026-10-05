@@ -189,4 +189,31 @@ describe('send-sms hook handler', () => {
     await handle(new Request('https://example.com', { method: 'POST', body: JSON.stringify({ user: { phone: '+919899999999' }, sms: { otp: '1' } }) }), deps)
     expect(deps.sendAllowed).not.toHaveBeenCalled()
   })
+
+  it("answers Auth as soon as WATI has the code, without waiting on the log (Auth's 5-second limit)", async () => {
+    let release!: () => void
+    const held = new Promise<void>((r) => { release = r })
+    const deferred: Promise<unknown>[] = []
+    const { deps } = setupDeps({ logDone: vi.fn(() => held), after: (work) => { deferred.push(work) } })
+    const res = await handle(new Request('https://example.com', { method: 'POST', body: JSON.stringify({ user: { phone: '+919822000001' }, sms: { otp: '1' } }) }), deps)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({})
+    // Still recorded, after the answer.
+    expect(deps.logDone).toHaveBeenCalledWith('fixed-local-id', 'bc-999', null)
+    expect(deferred).toHaveLength(1)
+    release()
+    await deferred[0]
+  })
+
+  it('still refunds a failed send after answering', async () => {
+    const deferred: Promise<unknown>[] = []
+    const { deps } = setupDeps({
+      wati: { sendTemplate: vi.fn(async () => ({ ok: false as const, category: 'rejected' as const, retryable: false, localId: 'x' })) },
+      after: (work) => { deferred.push(work) },
+    })
+    const res = await handle(new Request('https://example.com', { method: 'POST', body: JSON.stringify({ user: { phone: '+919822000001' }, sms: { otp: '1' } }) }), deps)
+    expect((await res.json()).error.http_code).toBe(500)
+    await Promise.all(deferred)
+    expect(deps.sendRefund).toHaveBeenCalledWith('+919822000001')
+  })
 })

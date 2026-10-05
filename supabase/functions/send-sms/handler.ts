@@ -20,6 +20,12 @@ export interface Deps {
   template: string
   /** Makes the id WATI reports back on; crypto.randomUUID in production. */
   newId?: () => string
+  /**
+   * Keeps work going after the answer is sent (EdgeRuntime.waitUntil in production). Auth throws the code away if the
+   * hook takes over 5 seconds, even when WATI has already delivered it, so nothing after the send holds up the answer.
+   * Without it, the work is finished first.
+   */
+  after?: (work: Promise<unknown>) => void
 }
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -70,9 +76,13 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   // A log that can't be written must not stop a code from being sent.
   await deps.log({ profileId, phone: digits, kind: 'signin_code', template: deps.template, localId, broadcastId: null, status: 'accepted', error: null }).catch(() => {})
   const sent = await deps.wati.sendTemplate({ phone: `+${digits}`, template: deps.template, params: [otp], localMessageId: localId, broadcastName: 'signin_code' })
-  // The failure category, and WATI's own reason when it gave one (masked, short), so a refusal can be fixed from the log.
-  await deps.logDone(localId, sent.ok ? sent.broadcastId : null, sent.ok ? null : sent.detail ? `${sent.category}: ${sent.detail}` : sent.category).catch(() => {})
-  if (!sent.ok) await deps.sendRefund(phone).catch(() => {})
+  const finish = (async () => {
+    // The failure category, and WATI's own reason when it gave one (masked, short), so a refusal can be fixed from the log.
+    await deps.logDone(localId, sent.ok ? sent.broadcastId : null, sent.ok ? null : sent.detail ? `${sent.category}: ${sent.detail}` : sent.category).catch(() => {})
+    if (!sent.ok) await deps.sendRefund(phone).catch(() => {})
+  })()
+  if (deps.after) deps.after(finish)
+  else await finish
   if (sent.ok) return json({})
   return unavailable(BUSY.has(sent.category) ? 503 : 500)
 }
