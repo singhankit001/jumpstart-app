@@ -27,6 +27,35 @@ function invitedPhone(): string {
   return invited
 }
 
+// Matches Supabase → Phone → OTP Expiration (environments.md): after this the code no longer works.
+const CODE_VALID_S = 300
+const PENDING_KEY = 'jumpstart.signinCode'
+
+/**
+ * The number a code was just sent to, kept on this device until the code expires. Reading the code means leaving for
+ * WhatsApp, and Safari on iPhone often reloads the page on return (WhatsApp's own browser closes outright), which would
+ * otherwise land the person back on the number with nowhere to type the code.
+ */
+const pendingCode = {
+  get(): { to: string; at: number } | null {
+    try {
+      const p = JSON.parse(localStorage.getItem(PENDING_KEY) ?? 'null') as { to?: unknown; at?: unknown } | null
+      if (!p || typeof p.to !== 'string' || typeof p.at !== 'number') return null
+      const age = Date.now() - p.at
+      return age >= 0 && age < CODE_VALID_S * 1000 ? { to: p.to, at: p.at } : null
+    } catch { return null }
+  },
+  set(to: string) { try { localStorage.setItem(PENDING_KEY, JSON.stringify({ to, at: Date.now() })) } catch { /* storage blocked: this page only */ } },
+  clear() { try { localStorage.removeItem(PENDING_KEY) } catch { /* nothing to clear */ } },
+}
+
+/** A code still waiting to be typed, unless an invitation link for a different number was just opened. */
+function resumable() {
+  const p = pendingCode.get()
+  const inv = invitedPhone()
+  return p && (!inv || inv === p.to) ? p : null
+}
+
 const PROMISES = [
   { icon: <UserCheck />, title: 'Invite only', text: 'The school adds every account.' },
   { icon: <KeyRound />, title: 'Code on WhatsApp', text: 'Stay signed in.' },
@@ -89,15 +118,17 @@ function FormError({ id, children }: { id: string; children: ReactNode }) {
  * Every answer reads the same whether or not the number or email is registered, so nobody can probe for accounts.
  */
 export function LoginScreen() {
-  const [step, setStep] = useState<'number' | 'code' | 'email'>('number')
+  // Back from WhatsApp after a reload: straight to the code box for the number it went to.
+  const [resumed] = useState(resumable)
+  const [step, setStep] = useState<'number' | 'code' | 'email'>(resumed ? 'code' : 'number')
   // From an invitation link (/#phone=…): the number is already filled in.
-  const [phone, setPhone] = useState(() => formatMobile(invitedPhone()))
+  const [phone, setPhone] = useState(() => formatMobile(resumed?.to ?? invitedPhone()))
   // The number the code went to, as stored (+ and the country code).
-  const [sentTo, setSentTo] = useState('')
+  const [sentTo, setSentTo] = useState(resumed?.to ?? '')
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [resendIn, setResendIn] = useState(0)
+  const [resendIn, setResendIn] = useState(() => resumed ? Math.max(0, RESEND_AFTER_S - Math.floor((Date.now() - resumed.at) / 1000)) : 0)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   // Guards against a double tap or Enter pressed twice before the busy state has rendered.
@@ -111,6 +142,7 @@ export function LoginScreen() {
   }, [resendIn])
 
   function changeNumber() {
+    pendingCode.clear()
     setStep('number')
     setError(null)
     setCode('')
@@ -142,6 +174,7 @@ export function LoginScreen() {
         // Asked again within the minute: the code already sent still works, so carry on to it.
         if (otpError && !/after \d+ seconds?/i.test(otpError.message)) return setError(authMessage(otpError))
       }
+      pendingCode.set(e164)
       setSentTo(e164)
       setStep('code')
       setCode('')
@@ -166,7 +199,8 @@ export function LoginScreen() {
       chooseArea.ask()
       const { error: verifyError } = await supabase.auth.verifyOtp({ phone: sentTo, token: code, type: 'sms' })
       // On success the session provider takes over and routes the person to their area.
-      if (verifyError) {
+      if (!verifyError) pendingCode.clear()
+      else {
         chooseArea.done()
         setCode('')
         setError(authMessage(verifyError))
@@ -176,6 +210,7 @@ export function LoginScreen() {
   }
 
   function showEmail(on: boolean) {
+    pendingCode.clear()
     setStep(on ? 'email' : 'number')
     setError(null)
     setPassword('')

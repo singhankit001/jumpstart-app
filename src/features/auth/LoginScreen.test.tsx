@@ -33,6 +33,7 @@ async function askForCode(user: ReturnType<typeof userEvent.setup>, number = '98
 
 beforeEach(() => {
   sessionStorage.clear()
+  localStorage.clear()
   auth.signInWithOtp.mockResolvedValue({ data: {}, error: null })
   auth.verifyOtp.mockResolvedValue({ data: {}, error: null })
   auth.rpc.mockResolvedValue({ data: true, error: null })
@@ -254,4 +255,44 @@ it('goes back to the mobile number from email sign-in', async () => {
   const user = await openEmail()
   await user.click(screen.getByRole('button', { name: /Use my mobile number instead/ }))
   expect(screen.getByLabelText('Mobile number')).toBeInTheDocument()
+})
+
+it('comes back to the code box after the page reloads on the way back from WhatsApp, and lets the code in', async () => {
+  let user = await open()
+  await askForCode(user)
+  await screen.findByRole('heading', { name: 'Check WhatsApp' })
+  // Safari on iPhone reloads the page (or WhatsApp's browser closes) while the person reads the code.
+  cleanup()
+  user = await open()
+  expect(screen.getByRole('heading', { name: 'Check WhatsApp' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /Change number, now \+91 98765 43210/ })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /Send a new code in \d+s/ })).toBeDisabled()
+  await user.type(screen.getByLabelText('6-digit code'), '123456')
+  await user.click(screen.getByRole('button', { name: 'Continue' }))
+  expect(auth.verifyOtp).toHaveBeenCalledWith({ phone: '+919876543210', token: '123456', type: 'sms' })
+  expect(auth.signInWithOtp).toHaveBeenCalledTimes(1)
+  // Signed in: the next visit starts fresh.
+  await waitFor(() => expect(localStorage.getItem('jumpstart.signinCode')).toBeNull())
+})
+
+it('starts at the number again once the code has expired, after Change number, or for an invitation to another number', async () => {
+  localStorage.setItem('jumpstart.signinCode', JSON.stringify({ to: '+919876543210', at: Date.now() - 301_000 }))
+  await open()
+  expect(screen.getByLabelText('Mobile number')).toBeInTheDocument()
+
+  cleanup()
+  let user = await open()
+  await askForCode(user)
+  await user.click(await screen.findByRole('button', { name: 'Use a different number' }))
+  cleanup()
+  await open()
+  expect(screen.getByLabelText('Mobile number')).toBeInTheDocument()
+
+  cleanup()
+  user = await open()
+  await askForCode(user)
+  await screen.findByRole('heading', { name: 'Check WhatsApp' })
+  cleanup()
+  await open('#phone=9800011111')
+  expect(screen.getByLabelText('Mobile number')).toHaveValue('+91 98000 11111')
 })
