@@ -59,12 +59,8 @@ self.addEventListener('push', (event) => {
     // a request that screen isn't announcing (another class, muted, sound paused, not on duty yet).
     const trip = typeof d.tag === 'string' && d.tag.startsWith('trip-') ? d.tag.slice(5) : null
     const watching = !!trip && open.some((c) => c.focused && c.visibilityState === 'visible' && announcing.get(c.id)?.has(trip))
-    // A request to the gate team (it opens the duty screen, as push.ts isGateAlert) reads "New Announcement" on a locked
-    // phone, where it can't be spoken; who and when follow in the body. A parent's alert about the trip opens /parent.
-    const request = !!trip && data.url.split('?')[0] === '/coordinator'
-    const details = [d.title, d.body].filter(Boolean).join('. ')
-    await self.registration.showNotification(request ? 'New Announcement' : d.title || 'Jumpstart Go', {
-      body: request ? details : d.body || '',
+    await self.registration.showNotification(d.title || 'Jumpstart Go', {
+      body: d.body || '',
       ...(gate ? { requireInteraction: true } : {}),
       // Browsers refuse vibrate together with silent.
       ...(watching ? { silent: true } : gate ? { vibrate: [300, 150, 300, 150, 600] } : {}),
