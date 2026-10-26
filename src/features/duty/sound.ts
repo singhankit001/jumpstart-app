@@ -271,7 +271,12 @@ export function explainVoiceProblem(p: { stage: string; detail: Record<string, u
   return fallback
 }
 
+// Locked or in the background but still able to play (the silent loop on older iPhones): only the opening, from the
+// school's made-ahead clip; the lock screen's notification carries the details (owner, 2026-10-26).
+const HIDDEN_TEXT = DEFAULT_OPENINGS[0]
+
 export async function speak(text: string, childId?: string, budgetMs = CLIP_BUDGET_MS): Promise<Spoken> {
+  if (globalThis.document?.visibilityState === 'hidden') { text = HIDDEN_TEXT; childId = undefined }
   const budget = budgetMs === CLIP_BUDGET_MS && speechSupported && !pickIndianVoice(speechSynthesis.getVoices()) ? NO_INDIAN_VOICE_BUDGET_MS : budgetMs
   const voice = await speakWith(text, childId, budget)
   const used: VoiceUsed = { voice, why: voice === 'school' ? null : explainVoiceProblem(lastVoiceProblem(), budget), at: Date.now() }
