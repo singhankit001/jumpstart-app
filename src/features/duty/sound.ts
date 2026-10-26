@@ -140,11 +140,12 @@ export function audioContext(): AudioContext {
     globalThis.document?.addEventListener('visibilitychange', back)
     globalThis.addEventListener?.('pageshow', back)
     globalThis.addEventListener?.('focus', back)
-    // The silent loop keeps playing while the page is hidden or the device is locked: a playing media element is what keeps
-    // the duty's audio running there, so pausing it silenced announcements with the screen off. iOS may still pause it with
-    // the rest of the page's media; it starts again on return, only while on duty.
+    // The silent loop plays only while the page is on screen: it exists to beat the ring/silent switch, never to keep a
+    // hidden or locked app running in the background. Paused when hidden, started again on return.
     globalThis.document?.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && keepAlive && keepAlive.paused && keepAliveWanted) void keepAlive.play().catch(() => {})
+      if (!keepAlive) return
+      if (document.visibilityState === 'hidden') keepAlive.pause()
+      else if (keepAlive.paused && keepAliveWanted) void keepAlive.play().catch(() => {})
     })
   }
   void ctx.resume()
@@ -247,7 +248,7 @@ function play(buf: AudioBuffer, mine: number): Promise<'done' | 'cut'> {
  * Which voice said it: the school's clips, the device's own voice (all or part), a sentence that started but was cut
  * off before its end (not heard, so said again), or nothing at all.
  */
-export type Spoken = 'school' | 'device' | 'cut' | 'silent'
+export type Spoken = 'school' | 'device' | 'cut' | 'silent' | 'opening'
 
 /** Which voice the last announcement used, and why when it wasn't the school's: shown on the duty screen. */
 export interface VoiceUsed { voice: Spoken; why: string | null; at: number }
@@ -271,9 +272,21 @@ export function explainVoiceProblem(p: { stage: string; detail: Record<string, u
   return fallback
 }
 
+// The made-ahead opening clip, said alone when a hidden screen couldn't sound the full announcement (owner, 2026-10-26).
+const FALLBACK_TEXT = DEFAULT_OPENINGS[0]
+
 export async function speak(text: string, childId?: string, budgetMs = CLIP_BUDGET_MS): Promise<Spoken> {
   const budget = budgetMs === CLIP_BUDGET_MS && speechSupported && !pickIndianVoice(speechSynthesis.getVoices()) ? NO_INDIAN_VOICE_BUDGET_MS : budgetMs
-  const voice = await speakWith(text, childId, budget)
+  // Locked or in the background, the full announcement is still tried first; only if nothing of it sounded to its end
+  // is "New announcement." tried, which is not the announcement heard (announcer.ts says it in full at the usual interval).
+  const hidden = globalThis.document?.visibilityState === 'hidden'
+  const mine = generation
+  let voice = await speakWith(text, childId, budget)
+  // Never after a Stop (acknowledged, Mute, End duty): that silence was on purpose.
+  if (hidden && mine === generation && (voice === 'silent' || voice === 'cut')) {
+    const short = await speakWith(FALLBACK_TEXT, undefined, budget)
+    if (short === 'school' || short === 'device') voice = 'opening'
+  }
   const used: VoiceUsed = { voice, why: voice === 'school' ? null : explainVoiceProblem(lastVoiceProblem(), budget), at: Date.now() }
   usedListeners.forEach((fn) => fn(used))
   return voice

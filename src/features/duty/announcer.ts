@@ -126,6 +126,9 @@ export function createAnnouncer(output: AnnouncerOutput, repeatMs = REPEAT_MS) {
         // Nothing sounded (no clip, audio paused, no device voice), or it was cut off mid-sentence: not heard, so try again
         // soon, still as new.
         if ((spoken === 'silent' || spoken === 'cut') && items.get(next.id) === next) silent = true
+        // Screen hidden and the full sentence couldn't sound: only "New announcement." did (sound.ts). Not heard, so it
+        // stays new and isn't reported; it comes back at the usual interval, not the silent retry, so it doesn't repeat every 15 s.
+        else if (spoken === 'opening') { /* not heard */ }
         // Heard unless Mute or an acknowledgement cut it short.
         else if (items.get(next.id) === next && Date.now() >= mutedUntil) {
           next.heard = true

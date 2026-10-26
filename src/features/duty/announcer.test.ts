@@ -327,6 +327,23 @@ describe('announcer heard reports (0059)', () => {
     }
   })
 
+  it('does not report "New announcement." alone (hidden screen) as heard, and says it in full at the usual interval, not in 15 s', async () => {
+    const heard = vi.fn()
+    let result: 'opening' | 'school' = 'opening'
+    const speak = vi.fn(async () => result)
+    const ann = createAnnouncer({ chime: async () => {}, speak, heard })
+    ann.announce(a('trip:3', PRIORITY.newRequest))
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(heard).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(speak).toHaveBeenCalledTimes(1)
+    result = 'school'
+    await vi.advanceTimersByTimeAsync(2 * 60_000)
+    expect(speak).toHaveBeenCalledTimes(2)
+    expect(heard).toHaveBeenCalledWith('trip:3')
+    ann.clear()
+  })
+
   it('does not report speech that Mute cut short', async () => {
     const out = { ...fakeOutput(), heard: vi.fn(), stop: vi.fn() }
     const ann = createAnnouncer(out)

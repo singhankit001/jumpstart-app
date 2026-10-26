@@ -395,3 +395,53 @@ describe('why the phone used its own voice', () => {
     expect(explainVoiceProblem({ stage: 'audio-paused', detail: {}, at }, 2500, at + 60_000)).toBe("the school's voice didn't arrive within 2.5 seconds")
   })
 })
+
+describe('locked or in the background (page hidden)', () => {
+  const page = (state: 'visible' | 'hidden') => { (globalThis as { document?: unknown }).document = { visibilityState: state, addEventListener() {} } }
+  afterEach(() => { delete (globalThis as { document?: unknown }).document })
+
+  it('plays the full announcement when it can, and never adds "New announcement."', async () => {
+    page('hidden')
+    const said = sound.speak('Aarav Shah will arrive for pickup.')
+    arrive('Aarav Shah will arrive for pickup.')
+    await vi.advanceTimersByTimeAsync(0)
+    finish()
+    expect(await said).toBe('school')
+    expect(pending.has('New announcement.')).toBe(false)
+  })
+
+  it('falls back to the made-ahead "New announcement." when the full one could not sound, and says it was only the opening', async () => {
+    page('hidden')
+    deviceVoice.speak.mockImplementationOnce(() => undefined) // the phone's voice is blocked too
+    const said = sound.speak('Aarav Shah will arrive for pickup.')
+    // The full clip's budget runs out, then the blocked phone voice times out; only then is the short clip asked for.
+    for (let t = 0; t < 15_000 && !pending.has('New announcement.'); t += 100) await vi.advanceTimersByTimeAsync(100)
+    arrive('New announcement.')
+    await vi.advanceTimersByTimeAsync(0)
+    finish()
+    expect(await said).toBe('opening')
+    expect(heard).toContain('start:New announcement.')
+  })
+
+  it('on screen, a full announcement that could not sound stays silent: no short fallback', async () => {
+    page('visible')
+    deviceVoice.speak.mockImplementationOnce(() => undefined)
+    const said = sound.speak('Aarav Shah will arrive for pickup.')
+    await vi.advanceTimersByTimeAsync(sound.CLIP_BUDGET_MS + 10_000)
+    expect(await said).toBe('silent')
+    expect(pending.has('New announcement.')).toBe(false)
+  })
+})
+
+describe('locked: a Stop is never followed by the short fallback', () => {
+  afterEach(() => { delete (globalThis as { document?: unknown }).document })
+  it('says nothing more after Stop (acknowledged or Mute) while the full announcement was waiting', async () => {
+    (globalThis as { document?: unknown }).document = { visibilityState: 'hidden', addEventListener() {} }
+    const said = sound.speak('Aarav Shah will arrive for pickup.')
+    await vi.advanceTimersByTimeAsync(500)
+    sound.stopSound()
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(await said).toBe('silent')
+    expect(pending.has('New announcement.')).toBe(false)
+  })
+})
