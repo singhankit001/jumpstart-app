@@ -247,7 +247,7 @@ function play(buf: AudioBuffer, mine: number): Promise<'done' | 'cut'> {
  * Which voice said it: the school's clips, the device's own voice (all or part), a sentence that started but was cut
  * off before its end (not heard, so said again), or nothing at all.
  */
-export type Spoken = 'school' | 'device' | 'cut' | 'silent'
+export type Spoken = 'school' | 'device' | 'cut' | 'silent' | 'opening'
 
 /** Which voice the last announcement used, and why when it wasn't the school's: shown on the duty screen. */
 export interface VoiceUsed { voice: Spoken; why: string | null; at: number }
@@ -276,9 +276,12 @@ export function explainVoiceProblem(p: { stage: string; detail: Record<string, u
 const HIDDEN_TEXT = DEFAULT_OPENINGS[0]
 
 export async function speak(text: string, childId?: string, budgetMs = CLIP_BUDGET_MS): Promise<Spoken> {
-  if (globalThis.document?.visibilityState === 'hidden') { text = HIDDEN_TEXT; childId = undefined }
+  const hidden = globalThis.document?.visibilityState === 'hidden'
+  if (hidden) { text = HIDDEN_TEXT; childId = undefined }
   const budget = budgetMs === CLIP_BUDGET_MS && speechSupported && !pickIndianVoice(speechSynthesis.getVoices()) ? NO_INDIAN_VOICE_BUDGET_MS : budgetMs
-  const voice = await speakWith(text, childId, budget)
+  const said = await speakWith(text, childId, budget)
+  // Only the opening was said: the announcement itself was not heard (announcer.ts).
+  const voice: Spoken = hidden && (said === 'school' || said === 'device') ? 'opening' : said
   const used: VoiceUsed = { voice, why: voice === 'school' ? null : explainVoiceProblem(lastVoiceProblem(), budget), at: Date.now() }
   usedListeners.forEach((fn) => fn(used))
   return voice
