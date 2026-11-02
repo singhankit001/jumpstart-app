@@ -12,7 +12,7 @@ import { UnreadProvider } from '../features/notifications/Unread'
 const AdminPeople = lazy(() => import('../features/admin/AdminPeople').then((m) => ({ default: m.AdminPeople })))
 const AdminSettings = lazy(() => import('../features/admin/AdminSettings').then((m) => ({ default: m.AdminSettings })))
 const AuditLog = lazy(() => import('../features/admin/AuditLog').then((m) => ({ default: m.AuditLog })))
-// The reports and their file makers (PDF, Excel, Word) load only when an admin or Head office opens them.
+// The reports and their file makers (PDF, Excel, Word) load only when staff open them.
 const ReportsPage = lazy(() => import('../features/reports/ReportsPage').then((m) => ({ default: m.ReportsPage })))
 const PrivacyPage = lazy(() => import('../features/legal/LegalPage').then((m) => ({ default: m.PrivacyPage })))
 const TermsPage = lazy(() => import('../features/legal/LegalPage').then((m) => ({ default: m.TermsPage })))
@@ -74,7 +74,7 @@ export function App() {
               <Route path="/admin/*" element={<AreaRoute area="admin"><AreaPages index={<AdminPeople />} area="admin" /></AreaRoute>} />
               <Route path="/core/*" element={<AreaRoute area="core"><AreaPages index={<CoreHome />} area="core" /></AreaRoute>} />
               <Route path="/pro/*" element={<AreaRoute area="pro"><AreaPages index={<FrontDesk />} area="pro" /></AreaRoute>} />
-              <Route path="/coordinator/*" element={<AreaRoute area="coordinator"><CoordinatorDuty /></AreaRoute>} />
+              <Route path="/coordinator/*" element={<AreaRoute area="coordinator"><Routes><Route path="reports" element={<ReportsPage area="coordinator" />} /><Route path="*" element={<CoordinatorDuty />} /></Routes></AreaRoute>} />
               <Route path="/parent/*" element={<AreaRoute area="parent"><ParentPages /></AreaRoute>} />
               <Route path="/t/:token" element={<CollectorLink />} />
               {/* Anything else: the login screen, or the person's home area once signed in. */}
