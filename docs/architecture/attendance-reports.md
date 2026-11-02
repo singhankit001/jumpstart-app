@@ -1,7 +1,12 @@
-# Attendance & Reports (PRD D63)
+# Attendance & Reports (PRD D63, D65)
 
-Admin and Head office (core) only. One dataset feeds the dashboard, the register and every download, so they never
-disagree.
+Admin, Head office (core), Center Leaders and Center Coordinators (0064); only the admin corrects. Every one of them
+sees every student. One dataset feeds the dashboard, the register and every download, so they never disagree.
+
+The page opens on **Classes**: one closed section per class with its student count and the period's present and absent
+figures; tapping a class opens its students. For one day each student shows check-in, check-out (or "Not checked
+out" when dropped off and not collected) and status; for a longer period, days present, late, absent and not
+recorded. There is no class picker. Gate roles reach the page from the Attendance tab at `/coordinator/reports`.
 
 ## Data: `attendance_report` (0062)
 
@@ -40,6 +45,11 @@ parent's name.
 ## Downloads
 
 Made in the browser and never stored: executive one-page A4 landscape PDF, detailed numbered PDF, Excel, Word, CSV.
+The detailed PDF (A4 landscape) opens with a summary (students in scope, present, confirmed absent, late arrivals,
+completed check-outs, incomplete records; no figures at all when nothing matches), then the classes compared, then
+one section per class: its rows sorted by student and date, the column header repeated on each page it continues to,
+names wrapped to two lines, rows never split across pages, times on the 12-hour clock, "Page n of N" on every page.
+A one-day report leaves out the Date column.
 The file maker and fonts load first, then `log_report_export` records the download (who, report, format, filters)
 and returns the Report ID printed on the file; a build replaced by a deploy since the page opened says "reload"
 before anything is logged. The export libraries and the PDF library's optional chunks are lazy and kept out of the

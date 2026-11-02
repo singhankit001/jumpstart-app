@@ -50,6 +50,11 @@ const AREA_PAGES: Partial<Record<Area, Array<{ to: string; label: string; short?
     { to: '/core/reports', label: 'Attendance & Reports', short: 'Reports', icon: <ChartColumn /> },
   ],
   parent: PARENT_PAGES,
+  // The duty screen has its own full-screen layout; these tabs show on the attendance page, to get back to the gate.
+  coordinator: [
+    { to: '/coordinator', label: 'Gate', icon: <BellRing /> },
+    { to: '/coordinator/reports', label: 'Attendance', icon: <ChartColumn /> },
+  ],
   pro: [
     { to: '/pro', label: 'Front desk', icon: <Headset /> },
     { to: '/pro/messages', label: 'Messages', icon: <MessageSquare /> },
@@ -66,10 +71,12 @@ function useAreaLabel(area: Area): string {
 
 export function AreaChip({ area }: { area: Area }) {
   const label = useAreaLabel(area)
+  // "Center coordinator" and "Center leader" need more room than the other labels before they fit beside the account button.
+  const narrow = label.length > 12 ? 'max-[419px]' : 'max-[374px]'
   return (
-    <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-secondary pl-2.5 pr-3 text-caption font-extrabold text-canvas shadow-[0_2px_0_var(--secondary-lip)] [&_svg]:size-4 max-[374px]:pr-2.5" aria-label={label}>
+    <span className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-secondary pl-2.5 pr-3 text-caption font-extrabold text-canvas shadow-[0_2px_0_var(--secondary-lip)] [&_svg]:size-4 ${narrow === 'max-[419px]' ? 'max-[419px]:pr-2.5' : 'max-[374px]:pr-2.5'}`} aria-label={label}>
       {AREA_ICON[area]}
-      <span className="max-[374px]:hidden">{label}</span>
+      <span className={narrow === 'max-[419px]' ? 'max-[419px]:hidden' : 'max-[374px]:hidden'}>{label}</span>
     </span>
   )
 }

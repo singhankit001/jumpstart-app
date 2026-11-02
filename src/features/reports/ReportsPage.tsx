@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BarChart3, CalendarDays, Download, ListChecks, TriangleAlert } from 'lucide-react'
+import { BarChart3, CalendarDays, Download, GraduationCap, ListChecks, TriangleAlert } from 'lucide-react'
 import { AreaShell } from '../auth/AreaShell'
 import { useSession } from '../auth/session'
 import { Tabs } from '../../ui/Tabs'
@@ -8,15 +8,16 @@ import { SelectField } from '../../ui/Field'
 import { EmptyState, ErrorState, Notice, SkeletonList } from '../../ui/States'
 import { addDays } from '../../ui/RangeCalendar'
 import { todayInIndia } from '../trips/api'
-import { loadOptions, loadReport, type Filters, type Option } from './api'
+import { loadOptions, loadReport, type Filters, type Option, type Student } from './api'
 import { barChart, lineChart } from './charts'
 import { BarList, Chart } from './ChartCards'
 import { binRange, dayLabel, pct, ATTENDANCE_LABEL, type ReportData, type Row } from './engine'
 import { buildDoc, type ReportDoc } from './exports/doc'
+import { ClassList } from './ClassList'
 import { Register } from './Register'
 import { Studio } from './Studio'
 
-type Tab = 'overview' | 'register' | 'downloads'
+type Tab = 'classes' | 'overview' | 'register' | 'downloads'
 type Preset = 'today' | 'week' | 'month' | '30' | 'custom'
 const PRESETS: Array<{ key: Preset; label: string }> = [
   { key: 'today', label: 'Today' }, { key: 'week', label: 'This week' }, { key: 'month', label: 'This month' }, { key: '30', label: 'Last 30 days' }, { key: 'custom', label: 'Custom' },
@@ -30,17 +31,16 @@ function rangeOf(p: Preset, today: string): { from: string; to: string } | null 
   return null
 }
 
-/** Admin and Head office → Attendance & Reports: today, the analytics, the register and the downloads, from one dataset. */
-export function ReportsPage({ area }: { area: 'admin' | 'core' }) {
+/** Attendance & Reports for the admin, Head office and the gate roles: students by class, the analytics, the register and the downloads, from one dataset. */
+export function ReportsPage({ area }: { area: 'admin' | 'core' | 'coordinator' }) {
   const { state } = useSession()
   const canCorrect = state.status === 'signed-in' && !!state.me?.roles.includes('admin')
   const today = todayInIndia()
-  const [tab, setTab] = useState<Tab>('overview')
+  const [tab, setTab] = useState<Tab>('classes')
   const [preset, setPreset] = useState<Preset>('month')
   const [range, setRange] = useState(() => rangeOf('month', today)!)
-  const [classId, setClassId] = useState('')
   const [programmeId, setProgrammeId] = useState('')
-  const [options, setOptions] = useState<{ classes: Option[]; programmes: Option[] } | null>(null)
+  const [options, setOptions] = useState<{ classes: Option[]; programmes: Option[]; students: Student[] } | null>(null)
   const [optionsFailed, setOptionsFailed] = useState(false)
   // With the filters it was read for: after a correction the same report is read again behind the current one.
   const [read, setRead] = useState<{ key: string; data: ReportData } | null>(null)
@@ -48,8 +48,8 @@ export function ReportsPage({ area }: { area: 'admin' | 'core' }) {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const filters: Filters = useMemo(() => ({ from: range.from, to: range.to, classId: classId || null, programmeId: programmeId || null, childId: null }), [range, classId, programmeId])
-  const scope = [classId ? options?.classes.find((c) => c.id === classId)?.name : 'All classes', programmeId ? options?.programmes.find((p) => p.id === programmeId)?.name : 'all programmes'].filter(Boolean).join(' · ')
+  const filters: Filters = useMemo(() => ({ from: range.from, to: range.to, classId: null, programmeId: programmeId || null, childId: null }), [range, programmeId])
+  const scope = ['All classes', programmeId ? options?.programmes.find((p) => p.id === programmeId)?.name : 'all programmes'].filter(Boolean).join(' · ')
 
   const key = JSON.stringify(filters)
   const load = useCallback(() => {
@@ -65,7 +65,7 @@ export function ReportsPage({ area }: { area: 'admin' | 'core' }) {
   useEffect(load, [load])
   const loadLists = useCallback(() => {
     setOptionsFailed(false)
-    void loadOptions().then(setOptions, () => { setOptions({ classes: [], programmes: [] }); setOptionsFailed(true) })
+    void loadOptions().then(setOptions, () => { setOptions({ classes: [], programmes: [], students: [] }); setOptionsFailed(true) })
   }, [])
   useEffect(loadLists, [loadLists])
   const data = read?.data ?? null
@@ -93,10 +93,6 @@ export function ReportsPage({ area }: { area: 'admin' | 'core' }) {
               <DateField label="To" value={range.to} min={range.from} max={today} onChange={(to) => setRange((r) => ({ from: r.from > to ? to : r.from, to }))} />
             </>
           )}
-          <SelectField label="Class" value={classId} onValue={setClassId}>
-            <option value="">All classes</option>
-            {options?.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </SelectField>
           <SelectField label="Programme" value={programmeId} onValue={setProgrammeId}>
             <option value="">All programmes</option>
             {options?.programmes.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -104,7 +100,7 @@ export function ReportsPage({ area }: { area: 'admin' | 'core' }) {
         </div>
         {optionsFailed && (
           <Notice tone="warning">
-            Couldn't load the class and programme lists, so only All can be chosen.{' '}
+            Couldn't load the classes, students and programmes, so students can't be shown by class.{' '}
             <button type="button" className="inline-flex min-h-11 items-center font-extrabold text-accent-ink underline underline-offset-2" onClick={loadLists}>Try again</button>
           </Notice>
         )}
@@ -117,6 +113,7 @@ export function ReportsPage({ area }: { area: 'admin' | 'core' }) {
 
       <div className="mt-6">
         <Tabs id="reports" label="Reports" value={tab} onChange={setTab} items={[
+          { key: 'classes', label: 'Classes', icon: <GraduationCap /> },
           { key: 'overview', label: 'Overview', icon: <BarChart3 /> },
           { key: 'register', label: 'Register', icon: <ListChecks />, count: doc?.exceptions.length || null },
           { key: 'downloads', label: 'Downloads', icon: <Download /> },
@@ -126,6 +123,7 @@ export function ReportsPage({ area }: { area: 'admin' | 'core' }) {
       <div id="reports-panel" role="tabpanel" aria-labelledby={`reports-${tab}`} className="mt-5" aria-busy={loading}>
         {error ? <ErrorState title="Couldn't load attendance" onRetry={load}>{error}</ErrorState>
           : !doc || reading ? <SkeletonList count={6} className="grid gap-3 md:grid-cols-3" height="h-[120px]" />
+          : tab === 'classes' ? <ClassList classes={options?.classes ?? []} students={options?.students ?? []} rows={doc.rows} oneDay={range.from === range.to} />
           : tab === 'overview' ? <Overview doc={doc} today={today} onOpen={() => setTab('register')} />
           : tab === 'register' ? <Register doc={doc} canCorrect={canCorrect} onChanged={load} />
           : <Studio filters={filters} scope={scope} rows={doc.rows} />}

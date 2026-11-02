@@ -24,7 +24,7 @@ export function sampleReport(o: { from?: string; to?: string; children?: number;
       const schedOut = i % 3 === 0 ? 12 * 60 + 30 : i % 3 === 1 ? 13 * 60 : 17 * 60 + 30
       const r = rand()
       const base: RawRow = {
-        child_id: `c${i}`, child: o.longNames && i === 0 ? 'Aaradhya Venkatanarayanan Subramaniam-Krishnamurthy' : `${first[i % 12]} ${last[i % 8]}`,
+        child_id: `c${i}`, child: o.longNames && i === 0 ? 'Aaradhya Venkatanarayanan Subramaniam-Krishnamurthy' : `${first[i % 12]} ${last[(i + Math.floor(i / 12)) % 8]}`,
         class: cls, class_id, programme: `${cls} · ${i % 3 === 2 ? 'Day care' : 'Half day'}`, day, expected: true,
         sched_in: '09:00', sched_out: `${String(Math.floor(schedOut / 60)).padStart(2, '0')}:${String(schedOut % 60).padStart(2, '0')}`,
         marked: null, note: null, dropoff_at: null, pickup_at: null, dropoff_source: null, pickup_source: null, dropoff_by: null, pickup_by: null,

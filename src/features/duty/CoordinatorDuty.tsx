@@ -1,3 +1,5 @@
+import { Link } from 'react-router'
+import { ChartColumn } from 'lucide-react'
 import { useOnline } from '../../ui/hooks'
 import { AccountButton } from '../auth/AreaShell'
 import { OnDuty } from './OnDuty'
@@ -15,7 +17,8 @@ export default function CoordinatorDuty() {
   if (duty.phase === 'loading') return <div className="gutter grid min-h-dvh place-items-center" aria-busy="true"><SkeletonList count={3} className="grid w-full max-w-[760px] gap-3" /></div>
   return (
     <>
-      <div className="fixed right-[max(16px,env(safe-area-inset-right))] top-[max(16px,env(safe-area-inset-top))] z-20">
+      <div className="fixed right-[max(16px,env(safe-area-inset-right))] top-[max(16px,env(safe-area-inset-top))] z-20 flex items-center gap-2">
+        <Link to="/coordinator/reports" className="account-pill flex h-11 items-center gap-2 rounded-full px-3.5 text-small font-bold"><ChartColumn className="size-5" aria-hidden />Attendance</Link>
         <AccountButton area="coordinator" />
       </div>
       <StartDuty duty={duty} online={online} />

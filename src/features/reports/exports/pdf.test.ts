@@ -42,12 +42,37 @@ describe('executive PDF', () => {
 })
 
 describe('detailed PDF', () => {
-  it('has every row, on as many pages as it takes, each numbered', () => {
+  const day = (data = sampleReport(), d = '2026-10-15') => ({ ...data, from: d, to: d, cutoff: d, rows: data.rows.filter((r) => r.day === d) })
+  it('has every row, grouped by class, on as many numbered pages as it takes', () => {
     const d = doc()
     const pdf = detailedPdf(d, assets)
     keep('detailed.pdf', pdf)
-    const pages = pagesOf(pdf)
-    expect(pages).toBeGreaterThan(1)
+    const t = text(pdf)
+    expect(pagesOf(pdf)).toBeGreaterThan(1)
     expect(d.rows.length).toBeGreaterThan(600)
+    expect(d.classes.map((c) => c.name)).toEqual(['Jr KG', 'Nursery', 'Playgroup'])
+    expect(t).toMatch(/\/FontFile2/)
+  })
+  it('lays out one day, one class, one student, long names, missing times and no data', () => {
+    const oneDay = detailedPdf(doc(day()), assets)
+    keep('detailed-one-day.pdf', oneDay)
+    expect(pagesOf(oneDay)).toBeGreaterThanOrEqual(1)
+    const data = day()
+    const oneClass = detailedPdf(doc({ ...data, rows: data.rows.filter((r) => r.class_id === 'k2') }), assets)
+    keep('detailed-one-class.pdf', oneClass)
+    expect(pagesOf(oneClass)).toBe(1)
+    const one = detailedPdf(doc({ ...data, rows: data.rows.filter((r) => r.child_id === 'c1') }), assets)
+    keep('detailed-one-student.pdf', one)
+    expect(pagesOf(one)).toBe(1)
+    const long = detailedPdf(doc(day(sampleReport({ longNames: true }))), assets)
+    keep('detailed-long-names.pdf', long)
+    // Checked in, never collected: stays on the register as not checked out, never as gone.
+    const missing = { ...data, rows: data.rows.slice(0, 6).map((r, i) => (i < 3 ? { ...r, pickup_at: null, pickup_source: null } : i === 3 ? { ...r, marked: null, dropoff_at: null, pickup_at: null, dropoff_source: null, pickup_source: null } : r)) }
+    const gaps = detailedPdf(doc(missing), assets)
+    keep('detailed-missing-times.pdf', gaps)
+    expect(pagesOf(gaps)).toBe(1)
+    const empty = detailedPdf(doc({ ...data, rows: [] }), assets)
+    keep('detailed-empty.pdf', empty)
+    expect(pagesOf(empty)).toBe(1)
   })
 })

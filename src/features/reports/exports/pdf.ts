@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf'
 import { barChart, lineChart, type Box, type ChartModel } from '../charts'
-import { BIN_MIN, dayLabel, pct, type Row } from '../engine'
+import { formatTime } from '../../../domain/time'
+import { ATTENDANCE_LABEL, BIN_MIN, dayLabel, LATE_MIN, pct, type Row } from '../engine'
 import { busiestNote, stamp, type ReportDoc } from './doc'
 
 /** The embedded typeface (Plus Jakarta Sans, OFL) as base64 TTFs, and the school's logo as PNG bytes. */
@@ -262,60 +263,166 @@ export function executivePdf(d: ReportDoc, a: PdfAssets): ArrayBuffer {
   return doc.output('arraybuffer')
 }
 
-// The detailed register: every row, as many A4 landscape pages as it takes ------------------------------------------------
+// The detailed register: a summary, the classes compared, then each class's rows, as many A4 landscape pages as it takes --
 
-const COLS: Array<{ label: string; w: number; value: (r: Row) => string }> = [
-  { label: 'Date', w: 21, value: (r) => dayLabel(r.day) },
-  { label: 'Child', w: 38, value: (r) => r.child },
-  { label: 'Class', w: 26, value: (r) => r.class },
-  { label: 'Status', w: 19, value: (r) => r.attendance.replace('_', ' ').replace(/^./, (c) => c.toUpperCase()) },
-  { label: 'Record', w: 19, value: (r) => (r.record === 'none' ? '—' : r.record.replace('_', ' ').replace(/^./, (c) => c.toUpperCase())) },
-  { label: 'Sched. in', w: 14, value: (r) => r.sched_in ?? '' },
-  { label: 'Drop-off', w: 24, value: (r) => (r.dropoffMin === null ? '' : `${hm(r.dropoffMin)} ${src(r.dropoff_source)}`) },
-  { label: 'Sched. out', w: 15, value: (r) => r.sched_out ?? '' },
-  { label: 'Pickup', w: 24, value: (r) => (r.pickupMin === null ? '' : `${hm(r.pickupMin)} ${src(r.pickup_source)}`) },
-  { label: 'Late in / out (min)', w: 22, value: (r) => (r.lateArrivalMin ?? r.latePickupMin) === null ? '' : `${r.lateArrivalMin ?? '—'} / ${r.latePickupMin ?? '—'}` },
-  { label: 'Exceptions', w: 51, value: (r) => r.issues.join('; ') },
-]
-const hm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
-const src = (s: Row['dropoff_source']) => (s === 'gate' ? '· gate' : s === 'corrected' ? '· corr.' : s === 'record' ? '· unverif.' : '')
+/** "9:05 AM", the same clock as the dashboard; null when there is no time. */
+const clock = (min: number | null) => (min === null ? null : formatTime(min))
+const duration = (r: Row) => {
+  if (r.dropoffMin === null || r.pickupMin === null || r.pickupMin < r.dropoffMin) return '—'
+  const m = r.pickupMin - r.dropoffMin
+  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`
+}
+const came = (r: Row) => r.attendance === 'present' || r.attendance === 'late'
+/** The check-out cell: the time, or why there is none. A child dropped off and not collected is never shown as gone. */
+const checkOut = (r: Row) => clock(r.pickupMin) ?? (came(r) && r.dropoffMin !== null ? (r.record === 'on_campus' ? 'On campus' : 'Not checked out') : '—')
+const tag = (verified: boolean, s: Row['dropoff_source']) => (s === null || verified ? '' : s === 'expired' ? ' (over 30 days)' : ' (not verified)')
+
+interface RegCol { label: string; w: number; align?: 'right'; value: (r: Row) => string; tone?: (r: Row) => string | null }
+function registerColumns(d: ReportDoc, oneDay: boolean): RegCol[] {
+  const cols: RegCol[] = [
+    { label: 'Student', w: 52, value: (r) => r.child },
+    ...(oneDay ? [] : [{ label: 'Date', w: 24, value: (r: Row) => dayLabel(r.day) }]),
+    { label: 'Check-in', w: 32, value: (r) => (clock(r.dropoffMin) ?? '—') + tag(r.dropoffVerified, r.dropoff_source) },
+    { label: 'Check-out', w: 32, value: (r) => checkOut(r) + (r.pickupMin === null ? '' : tag(r.pickupVerified, r.pickup_source)), tone: (r) => (checkOut(r) === 'Not checked out' ? WARN : null) },
+    { label: 'Duration', w: 18, align: 'right', value: duration },
+    { label: 'Status', w: 24, value: (r) => ATTENDANCE_LABEL[r.attendance], tone: (r) => (r.attendance === 'not_recorded' ? WARN : r.attendance === 'late' ? WARN : null) },
+    { label: 'Exceptions', w: 60, value: (r) => r.issues.join('; ') || '—', tone: (r) => (r.issues.length ? WARN : null) },
+  ]
+  if (d.sections.names) cols.splice(6, 0, { label: 'Recorded by', w: 34, value: (r) => [r.dropoff_by, r.pickup_by].filter(Boolean).join(' / ') || '—' })
+  if (d.sections.notes) cols.push({ label: 'Note', w: 40, value: (r) => r.note ?? '—' })
+  return cols
+}
+const WARN = '#a3361d'
 
 export function detailedPdf(d: ReportDoc, a: PdfAssets): ArrayBuffer {
   const title = 'Attendance Register'
   const doc = start(a, d, title)
-  const rowH = 5.6
-  const top = M + 41
-  const perPage = Math.floor((H - 16 - top) / rowH)
-  const pages = Math.max(1, Math.ceil(d.rows.length / perPage))
-  const scale = (W - 2 * M) / COLS.reduce((s, c) => s + c.w, 0)
-  for (let p = 0; p < pages; p++) {
-    if (p > 0) doc.addPage()
-    header(doc, a, d, title)
-    if (p === 0) {
-      font(doc, 'normal', 7.2, INK2)
-      const k = d.kpis
-      doc.text(fit(doc, `${d.rows.length} child-days · attendance ${pct(k.attendanceRate)} · ${k.verifiedDropoffs} verified drop-offs · ${k.verifiedPickups} verified pickups · ${k.incomplete} incomplete records. Times are India Standard Time.`, W - 2 * M), M, M + 25, { baseline: 'top' })
-    }
-    let x = M
-    const hy = top - 7
-    doc.setFillColor(TILE)
-    doc.rect(M, hy - 1.5, W - 2 * M, 6, 'F')
-    font(doc, 'semibold', 6.6, INK2)
-    for (const c of COLS) { doc.text(c.label, x + 1.5, hy + 1.5, { baseline: 'middle' }); x += c.w * scale }
-    font(doc, 'normal', 6.8)
-    const slice = d.rows.slice(p * perPage, (p + 1) * perPage)
-    slice.forEach((r, i) => {
-      const y = top + i * rowH
-      if (i % 2 === 1) { doc.setFillColor('#fafbfd'); doc.rect(M, y - 2.6, W - 2 * M, rowH, 'F') }
-      let cx = M
-      for (const c of COLS) {
-        doc.setTextColor(c.label === 'Exceptions' && r.issues.length ? '#a3361d' : INK)
-        doc.text(fit(doc, c.value(r), c.w * scale - 3), cx + 1.5, y, { baseline: 'middle' })
-        cx += c.w * scale
-      }
-    })
-    if (!d.rows.length) { font(doc, 'semibold', 8, INK2); doc.text('No attendance rows in this period.', M, top) }
-    footer(doc, d, p + 1, pages)
+  const top = M + 25
+  const bottom = H - 15
+  const fullW = W - 2 * M
+  // A one-day report says its date once, in the header.
+  const oneDay = new Set(d.rows.map((r) => r.day)).size <= 1
+  const cols = registerColumns(d, oneDay)
+  const scale = fullW / cols.reduce((s, c) => s + c.w, 0)
+  const pad = 2
+  const lineH = 3.3
+  let y = top
+
+  const newPage = () => { doc.addPage(); header(doc, a, d, title); y = top }
+  const need = (h: number) => { if (y + h > bottom) newPage() }
+  const label = (text: string) => { font(doc, 'semibold', 7, MUTED); doc.text(text.toUpperCase(), M, y, { baseline: 'top' }); y += 5 }
+
+  header(doc, a, d, title)
+
+  // 1. Summary: only figures the rows can give. An empty report shows no figures at all, rather than a row of zeros.
+  if (d.sections.kpis && d.rows.length) {
+    const k = d.kpis
+    const students = new Set(d.rows.map((r) => r.child_id)).size
+    const days = d.rows.length
+    const completed = d.rows.filter((r) => came(r) && r.pickupMin !== null).length
+    const n = (v: number) => v.toLocaleString('en-IN')
+    const one = oneDay
+    const unit = one ? 'students' : 'child-days'
+    const tiles: Array<[string, string, string]> = [
+      ['Students in scope', n(students), one ? 'Expected or recorded that day' : `${n(days)} child-days in the period`],
+      ['Present', n(k.counts.present + k.counts.late), 'Checked in or marked present'],
+      ['Confirmed absent', n(k.counts.absent), 'Marked absent or on leave'],
+      ['Late arrivals', n(k.lateArrivals), `Verified, over ${LATE_MIN} min after schedule`],
+      ['Completed check-outs', n(completed), `of ${n(k.counts.present + k.counts.late)} present ${unit}`],
+      ['Incomplete records', n(k.incomplete), `${n(k.notRecorded)} not recorded · ${n(k.missingVerification)} not verified`],
+    ]
+    label('Summary')
+    const tW = (fullW - 5 * 3) / 6
+    tiles.forEach(([l, v, det], i) => tile(doc, { x: M + i * (tW + 3), y, w: tW, h: 21 }, l, v, det, d.theme.accent))
+    y += 21 + 7
   }
+
+  // 2. The classes compared, when there is more than one.
+  if (d.classes.length > 1) {
+    const cc: Array<[string, number, 'right' | undefined]> = [['Class', 70, undefined], ['Students', 24, 'right'], ['Present', 24, 'right'], ['Absent', 24, 'right'], ['Late arrivals', 28, 'right'], ['Not recorded', 28, 'right'], ['Incomplete', 26, 'right'], ['Attendance', 26, 'right']]
+    const k2 = fullW / cc.reduce((s, c) => s + c[1], 0)
+    for (const c of cc) c[1] *= k2
+    const cw = fullW
+    need(5 + 6 + 5.5 * 2)
+    label('By class')
+    const head = () => {
+      doc.setFillColor(TILE); doc.rect(M, y, cw, 6, 'F')
+      font(doc, 'semibold', 6.8, INK2)
+      let x = M
+      for (const [l, w, al] of cc) { doc.text(l, al ? x + w - pad : x + pad, y + 3, { baseline: 'middle', align: al ?? 'left' }); x += w }
+      y += 6
+    }
+    head()
+    for (const c of d.classes) {
+      need(5.5)
+      if (y === top) head()
+      const list = d.rows.filter((r) => r.class_id === c.classId)
+      const vals = [c.name, String(new Set(list.map((r) => r.child_id)).size), String(c.present), String(list.filter((r) => r.attendance === 'absent').length),
+        String(list.filter((r) => r.lateArrivalMin !== null).length), String(list.filter((r) => r.attendance === 'not_recorded').length), String(c.incomplete), pct(c.rate)]
+      font(doc, 'normal', 7.2)
+      let x = M
+      cc.forEach(([, w, al], i) => { doc.text(fit(doc, vals[i]!, w - 2 * pad), al ? x + w - pad : x + pad, y + 2.75, { baseline: 'middle', align: al ?? 'left' }); x += w })
+      doc.setDrawColor(LINE); doc.setLineWidth(0.2); doc.line(M, y + 5.5, M + cw, y + 5.5)
+      y += 5.5
+    }
+    y += 7
+  }
+
+  // 3. Each class: a heading, the column header (again on every page it continues to), then whole rows only.
+  const groups = d.classes.length ? d.classes : []
+  const colHead = () => {
+    doc.setFillColor(TILE); doc.rect(M, y, fullW, 6.5, 'F')
+    font(doc, 'semibold', 6.8, INK2)
+    let x = M
+    for (const c of cols) { const w = c.w * scale; doc.text(c.label, c.align ? x + w - pad : x + pad, y + 3.25, { baseline: 'middle', align: c.align ?? 'left' }); x += w }
+    y += 6.5
+  }
+  const classHead = (name: string, students: number, more: boolean) => {
+    font(doc, 'bold', 10)
+    doc.text(fit(doc, name, fullW - 60), M, y, { baseline: 'top' })
+    font(doc, 'normal', 7.5, INK2)
+    doc.text(`${students} ${students === 1 ? 'student' : 'students'}${more ? ' · continued' : ''}`, W - M, y + 0.8, { align: 'right', baseline: 'top' })
+    y += 6
+    colHead()
+  }
+  // Every cell's lines, so a row's height is its tallest cell: long names wrap to two lines, never run into the next column.
+  const cells = (r: Row) => cols.map((c) => {
+    const w = c.w * scale - 2 * pad
+    font(doc, c.label === 'Student' ? 'semibold' : 'normal', 7.2)
+    return wrap(doc, c.value(r), w, c.label === 'Student' || c.label === 'Exceptions' || c.label === 'Note' ? 2 : 1)
+  })
+  for (const g of groups) {
+    const list = d.rows.filter((r) => r.class_id === g.classId).sort((p, q) => p.child.localeCompare(q.child) || p.day.localeCompare(q.day))
+    const students = new Set(list.map((r) => r.child_id)).size
+    const first = list[0] ? cells(list[0]) : []
+    // A class heading never sits alone at the foot of a page.
+    need(8 + 6.5 + Math.max(1, ...first.map((l) => l.length)) * lineH + 2.6)
+    classHead(g.name, students, false)
+    list.forEach((r, i) => {
+      const lines = cells(r)
+      const h = Math.max(...lines.map((l) => l.length)) * lineH + 2.6
+      if (y + h > bottom) { newPage(); classHead(g.name, students, true) }
+      if (i % 2 === 1) { doc.setFillColor('#fafbfd'); doc.rect(M, y, fullW, h, 'F') }
+      let x = M
+      cols.forEach((c, j) => {
+        const w = c.w * scale
+        font(doc, c.label === 'Student' ? 'semibold' : 'normal', 7.2, c.tone?.(r) ?? INK)
+        doc.text(lines[j]!, c.align ? x + w - pad : x + pad, y + 1.3, { baseline: 'top', align: c.align ?? 'left', lineHeightFactor: 1.3 })
+        x += w
+      })
+      doc.setDrawColor(LINE); doc.setLineWidth(0.15); doc.line(M, y + h, M + fullW, y + h)
+      y += h
+    })
+    y += 6
+  }
+  if (!d.rows.length) {
+    need(20)
+    doc.setFillColor(TILE); doc.roundedRect(M, y, fullW, 16, 2, 2, 'F')
+    font(doc, 'semibold', 8.5, INK2)
+    doc.text('No attendance records match this report: no student was expected and nothing was recorded in this period.', M + fullW / 2, y + 8, { align: 'center', baseline: 'middle' })
+  }
+  // Footers last, when the number of pages is known.
+  const pages = doc.getNumberOfPages()
+  for (let p = 1; p <= pages; p++) { doc.setPage(p); footer(doc, d, p, pages) }
   return doc.output('arraybuffer')
 }

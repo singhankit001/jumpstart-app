@@ -396,9 +396,9 @@ export async function demoFetch(input: RequestInfo | URL, init?: RequestInit): P
     }
     if (rpc === 'announcement_stats') return json(readTalk().announcements.map((a) => ({ announcement_id: a.id, recipients: 6, reads: Object.values(readTalk().annReads).filter((r) => r.includes(a.id)).length })))
     if (rpc === 'recipient_count') return json(6)
-    // Attendance & Reports (0062): the made-up month from the reports' test fixture, for the requested range. Demo only.
+    // Attendance & Reports (0062, 0064): the made-up month from the reports' test fixture, for the requested range. Demo only.
     if (rpc === 'attendance_report') {
-      if (!me?.roles.some((r) => r === 'admin' || r === 'core')) return json({ code: '42501', message: 'Only the admin and Head office can see attendance reports.' }, 403)
+      if (!me?.roles.some((r) => r === 'admin' || r === 'core' || r === 'leader' || r === 'coordinator')) return json({ code: '42501', message: 'Only school staff can see attendance reports.' }, 403)
       const { sampleReport } = await import('../features/reports/exports/fixture')
       const today = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)
       const to = String(body?.p_to) > today ? today : String(body?.p_to)
