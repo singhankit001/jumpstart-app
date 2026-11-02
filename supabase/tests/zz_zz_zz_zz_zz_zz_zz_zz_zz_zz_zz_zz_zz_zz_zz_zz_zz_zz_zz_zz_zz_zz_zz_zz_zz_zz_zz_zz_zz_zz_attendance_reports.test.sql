@@ -51,30 +51,15 @@ do $$ declare r json; riya json; rohan json; begin
   exception when sqlstate '22023' then null; end;
 end $$;
 
--- Head office reads too; nobody else.
+-- Head office reads too, and since 0064 the gate roles (zz_..._gate_roles_read_attendance.test.sql); parents don't.
 select pg_temp.as_who('00000000-0000-0000-0000-0000000000c1');
 do $$ begin assert json_typeof(public.attendance_report('2026-03-02', '2026-03-08') -> 'rows') = 'array', 'Head office reads'; end $$;
 select pg_temp.as_who('00000000-0000-0000-0000-0000000000d1');
 do $$ begin
-  perform public.attendance_report('2026-03-02', '2026-03-08');
-  raise exception 'FAIL: a coordinator read the report';
-exception when insufficient_privilege then null;
-end $$;
-do $$ begin
   perform 1 from public.attendance_corrections;
   assert (select count(*) from public.attendance_corrections) = 0, 'a coordinator sees no corrections';
 end $$;
-select pg_temp.as_who('00000000-0000-0000-0000-0000000000e1');
-do $$ begin
-  perform public.attendance_report('2026-03-02', '2026-03-08', null, null, '00000000-0000-0000-0000-0000000062a1');
-  raise exception 'FAIL: a parent read the report';
-exception when insufficient_privilege then null;
-end $$;
-do $$ begin
-  perform public.log_report_export('executive', 'pdf', '{}');
-  raise exception 'FAIL: a parent logged an export';
-exception when insufficient_privilege then null;
-end $$;
+-- Parent A (e1) is also a coordinator in these fixtures; a parent-only refusal is tested with 0064.
 
 -- Corrections: admin only, with a reason, all or nothing, each field kept, a repeat changes nothing.
 select pg_temp.as_who('00000000-0000-0000-0000-0000000000c1');
