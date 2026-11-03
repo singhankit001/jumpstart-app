@@ -16,7 +16,7 @@ import { explainTripError, gateStep, useTodayTrips, type GateStep, type Trip } f
 import { clockTime } from '../trips/rules'
 import { formatMobile } from '../../domain/contact'
 import { CodeSheet } from './CodeSheet'
-import { ExpectedLists } from './GateExtras'
+import { ClassRoster } from './GateExtras'
 import { Tabs } from '../../ui/Tabs'
 import { CallSheet } from '../school/CallSheet'
 import { useSchoolDay } from '../school/useSchoolDay'
@@ -352,8 +352,8 @@ export function GateQueue({ announcer, audible = true, paused = false }: { annou
         {error && <Notice tone="danger">{error}</Notice>}
         {sections.attention.length > 0 && Section({ title: 'Needs attention', icon: <TriangleAlert />, list: sections.attention })}
         {Section({ title: 'Coming', icon: <Navigation />, list: sections.coming, empty: 'Nobody is on the way right now. New drop-offs and pickups appear here and are announced.' })}
-        {school.children && <ExpectedLists canClose={canClose} children={school.children.filter((c) => inScope(c.id))} onDone={() => { school.reload(); void trips.reload() }} />}
         {sections.done.length > 0 && Section({ title: 'Done today', icon: <CircleCheck />, list: sections.done })}
+        {school.children && <ClassRoster canClose={canClose} children={school.children.filter((c) => inScope(c.id))} onDone={() => { school.reload(); void trips.reload() }} />}
       </div>
 
       {/* The chosen trip, side by side on iPad landscape and desktop. */}

@@ -1,8 +1,7 @@
 import { useState } from 'react'
-import { CalendarClock, CalendarX, DoorOpen, UserCheck } from '../../ui/icons'
+import { DoorOpen, UserCheck, UsersRound } from '../../ui/icons'
 import { Avatar } from '../../ui/Avatar'
 import { Button, LuxButton } from '../../ui/Button'
-import { Pill } from '../../ui/Pill'
 import { Sheet } from '../../ui/Sheet'
 import { Notice } from '../../ui/States'
 import { useToast } from '../../ui/Toast'
@@ -11,7 +10,9 @@ import { formatTime } from '../../domain/time'
 import type { Direction } from '../../domain/programme'
 import { explainDbError } from '../admin/api'
 import { gateWalkIn } from '../school/api'
-import { AWAY_LABEL } from '../school/dayModel'
+import { ProgrammeChips } from '../admin/ProgrammeChips'
+import { groupByProgramme } from '../admin/programmeGroups'
+import { StatePill } from '../school/Board'
 import type { SchoolChild } from '../school/useSchoolDay'
 
 const WORD: Record<Direction, string> = { dropoff: 'drop-off', pickup: 'pickup' }
@@ -75,48 +76,55 @@ function WalkInSheet({ c, direction, onClose, onDone }: { c: SchoolChild; direct
 }
 
 /**
- * Who else the gate expects today (Screen Book v3: "Coming up") at their regular or changed times, with Check in or
- * Hand over for someone who arrives without the app; then who isn't in today.
+ * The students in scope (your classes, or the whole school), by class: one chip per class with its count, then each
+ * class's students with where their day stands, and Check in or Hand over for someone who arrives without the app.
+ * The queue above holds the real requests; this is the roster, never a list of arrivals.
  */
-export function ExpectedLists({ children, canClose, onDone }: { children: SchoolChild[]; canClose: boolean; onDone: () => void }) {
+export function ClassRoster({ children, canClose, onDone }: { children: SchoolChild[]; canClose: boolean; onDone: () => void }) {
   const [walkIn, setWalkIn] = useState<{ c: SchoolChild; direction: Direction } | null>(null)
-  const coming = children
-    .filter((c) => (c.day.state === 'expected' || c.day.state === 'here') && !c.day.trip)
-    .map((c) => ({ c, direction: (c.day.state === 'here' ? 'pickup' : 'dropoff') as Direction }))
-    .sort((a, b) => (a.c.day.next.at ?? 9999) - (b.c.day.next.at ?? 9999))
-  const away = children.filter((c) => c.day.state === 'away')
+  const [pick, setPick] = useState<string | null>(null)
+  const [order, setOrder] = useState<'asc' | 'desc'>('asc')
+  // Classes are the children's own (the label of their main programme), so nothing is listed that nobody is in.
+  const classes = [...new Set(children.map((c) => c.className).filter(Boolean))].map((n) => ({ id: n, name: n }))
+  const groups = groupByProgramme(children, classes, (c) => c.className || null, (c) => c.fullName, order)
+  // A class missing from this scope (switched to Your classes, say) shows every class instead.
+  const value = pick !== null && groups.some((g) => g.id === pick) ? pick : null
+  const shown = value === null ? groups : groups.filter((g) => g.id === value)
+  if (!children.length) return <p className="rounded-lg bg-sunken px-4 py-3 text-small font-semibold text-ink-2">No students in these classes yet.</p>
   return (
-    <>
-      <section className="grid gap-2.5">
-        <h2 className="kicker flex items-center gap-2 px-0.5 [&_svg]:size-4"><CalendarClock />Coming up · {coming.length}</h2>
-        {coming.length ? (
+    <section className="grid gap-2.5" aria-label="Students by class">
+      <h2 className="kicker flex items-center gap-2 px-0.5 [&_svg]:size-4"><UsersRound />Students · {children.length}</h2>
+      <ProgrammeChips groups={groups} value={value} onChange={setPick} order={order} onOrder={setOrder} label="Class" allLabel="All classes" />
+      {shown.map((g) => (
+        <div key={g.id || 'none'} className="grid gap-2.5">
+          <h3 className={`px-0.5 pt-1 text-h4 ${g.id ? '' : 'text-warning'}`}>{g.name} <span className="text-small font-bold text-ink-2 tabular-nums">· {g.items.length}</span></h3>
           <ul className="grid gap-2.5">
-            {coming.map(({ c, direction }) => (
-              <li key={c.id} className="card flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl p-3 pr-3.5">
-                <Avatar name={c.first} color={childColor(c.id)} />
-                <span className="min-w-0 flex-1 basis-[180px]">
-                  <span className="block truncate text-h4">{c.fullName}</span>
-                  <span className="block truncate text-small font-semibold text-ink-2">
-                    {c.day.changed[direction] ? 'Changed today' : c.regular ? 'Regular' : 'Window'} {WORD[direction]}, {c.day.next.at !== null ? formatTime(c.day.next.at) : 'time not set'}{c.className ? ` · ${c.className}` : ''}
+            {g.items.map((c) => {
+              // Only a child with no request open: a request is handled in the queue above.
+              const direction: Direction | null = c.day.trip ? null : c.day.state === 'expected' ? 'dropoff' : c.day.state === 'here' ? 'pickup' : null
+              const at = c.day.next.at
+              return (
+                <li key={c.id} className="card flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl p-3 pr-3.5">
+                  <Avatar name={c.first} color={childColor(c.id)} />
+                  <span className="min-w-0 flex-1 basis-[180px]">
+                    <span className="block truncate text-h4">{c.fullName}</span>
+                    <span className="block truncate text-small font-semibold text-ink-2">
+                      {c.className || 'Class not assigned'}{direction ? ` · ${c.day.changed[direction] ? 'changed today, ' : ''}${WORD[direction]} ${at !== null ? formatTime(at) : 'time not set'}` : ''}
+                    </span>
                   </span>
-                </span>
-                {canClose && (
-                  <LuxButton size="sm" icon={direction === 'dropoff' ? <DoorOpen /> : <UserCheck />} onClick={() => setWalkIn({ c, direction })}>
-                    {direction === 'dropoff' ? 'Check in' : 'Hand over'}
-                  </LuxButton>
-                )}
-              </li>
-            ))}
+                  <StatePill c={c} />
+                  {canClose && direction && (
+                    <LuxButton size="sm" icon={direction === 'dropoff' ? <DoorOpen /> : <UserCheck />} onClick={() => setWalkIn({ c, direction })}>
+                      {direction === 'dropoff' ? 'Check in' : 'Hand over'}
+                    </LuxButton>
+                  )}
+                </li>
+              )
+            })}
           </ul>
-        ) : <p className="rounded-lg bg-sunken px-4 py-3 text-small font-semibold text-ink-2">Nobody else is expected today.</p>}
-      </section>
-      {away.length > 0 && (
-        <p className="flex flex-wrap items-center gap-2 text-small font-semibold text-ink-2">
-          <CalendarX className="size-4" aria-hidden />Not in today:
-          {away.map((c) => <Pill key={c.id}>{c.first}, {(AWAY_LABEL[c.day.away!.status] ?? 'away').toLowerCase()}</Pill>)}
-        </p>
-      )}
+        </div>
+      ))}
       {walkIn && <WalkInSheet c={walkIn.c} direction={walkIn.direction} onClose={() => setWalkIn(null)} onDone={onDone} />}
-    </>
+    </section>
   )
 }
