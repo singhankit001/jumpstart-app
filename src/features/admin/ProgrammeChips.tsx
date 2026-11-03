@@ -5,13 +5,14 @@ import type { ProgrammeGroup } from './programmeGroups'
  * All students, then one chip per programme that has students, each with its count, then the sort order. Scrolls
  * sideways on a phone instead of wrapping into a wall of chips. `value` null is All students; '' is "not assigned".
  */
-export function ProgrammeChips<T>({ groups, value, onChange, order, onOrder, label = 'Programme' }: {
+export function ProgrammeChips<T>({ groups, value, onChange, order, onOrder, label = 'Programme', allLabel = 'All students' }: {
   groups: ReadonlyArray<ProgrammeGroup<T>>
   value: string | null
   onChange: (id: string | null) => void
   order: 'asc' | 'desc'
   onOrder: (o: 'asc' | 'desc') => void
   label?: string
+  allLabel?: string
 }) {
   const total = groups.reduce((n, g) => n + g.items.length, 0)
   const chip = (id: string | null, name: string, n: number) => (
@@ -23,7 +24,7 @@ export function ProgrammeChips<T>({ groups, value, onChange, order, onOrder, lab
   return (
     <div className="-mt-2 flex min-w-0 items-center gap-2">
       <div className="-mx-1 flex min-w-0 flex-1 gap-2 overflow-x-auto px-1 pb-1.5 pt-3 [scrollbar-width:none]" role="group" aria-label={label}>
-        {chip(null, 'All students', total)}
+        {chip(null, allLabel, total)}
         {groups.map((g) => chip(g.id, g.name, g.items.length))}
       </div>
       <button type="button" className="iconbtn shrink-0" onClick={() => onOrder(order === 'asc' ? 'desc' : 'asc')}
