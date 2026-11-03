@@ -11,9 +11,9 @@ const kids = [
 const group = (order?: 'asc' | 'desc') => groupByProgramme(kids, programmes, (k) => k.p, (k) => k.name, order)
 
 describe('groupByProgramme', () => {
-  it('puts each child under their saved programme, in the school order, with "not assigned" last', () => {
+  it('puts each child under their saved class, named as the school says it, in the school order, with "not assigned" last', () => {
     const g = group()
-    expect(g.map((x) => x.name)).toEqual(['Playgroup · 360°', 'Sr KG · Half day', 'Learning Center', NOT_ASSIGNED])
+    expect(g.map((x) => x.name)).toEqual(['Playgroup 360', 'Senior KG Half day', 'Learning Center', NOT_ASSIGNED])
     expect(g.map((x) => x.items.length)).toEqual([1, 2, 1, 2])
     // Every child exactly once: the counts add up to everyone.
     expect(g.flatMap((x) => x.items.map((k) => k.id)).sort()).toEqual(['1', '2', '3', '4', '5', '6'])
@@ -30,8 +30,8 @@ describe('groupByProgramme', () => {
     expect(group().some((x) => x.id === 'nu')).toBe(false)
     expect(groupByProgramme([], programmes, () => null, () => '')).toEqual([])
   })
-  it('orders by level, then name', () => {
+  it('orders by level, then morning to 360 plus', () => {
     expect(['After School Program', 'Sr KG · 360°', 'Nursery · Half day (morning)', 'Nursery · 360°', 'Custom class'].sort(byProgrammeOrder))
-      .toEqual(['Nursery · 360°', 'Nursery · Half day (morning)', 'Sr KG · 360°', 'After School Program', 'Custom class'])
+      .toEqual(['Nursery · Half day (morning)', 'Nursery · 360°', 'Sr KG · 360°', 'After School Program', 'Custom class'])
   })
 })

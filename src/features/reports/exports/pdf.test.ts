@@ -50,7 +50,7 @@ describe('detailed PDF', () => {
     const t = text(pdf)
     expect(pagesOf(pdf)).toBeGreaterThan(1)
     expect(d.rows.length).toBeGreaterThan(600)
-    expect(d.classes.map((c) => c.name)).toEqual(['Jr KG', 'Nursery', 'Playgroup'])
+    expect(d.classes.map((c) => c.name)).toEqual(['Playgroup', 'Nursery', 'Jr KG'])
     expect(t).toMatch(/\/FontFile2/)
   })
   it('lays out one day, one class, one student, long names, missing times and no data', () => {
@@ -77,8 +77,8 @@ describe('detailed PDF', () => {
   })
 })
 
-describe('detailed PDF by programme', () => {
-  it('compares programmes when a class has several, and the lines add up to the report', () => {
+describe('detailed PDF by class', () => {
+  it('handles several classes in a level, and the class lines add up to the report', () => {
     const data = sampleReport()
     // Two programmes in every class: half of each class on a different plan.
     const mixed = { ...data, rows: data.rows.map((r) => (Number(r.child_id.slice(1)) % 2 ? { ...r, programme: `${r.class} · 360°` } : r)) }

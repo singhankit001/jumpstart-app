@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { formatTime, indiaClock, toMinutes } from './time'
-import { programmeErrors, runsOn, type Programme } from './programme'
+import { byClassOrder, classLabel, programmeErrors, runsOn, type Programme } from './programme'
 import { formatAge, freshness } from './freshness'
 import { lateBand } from './lateness'
 
@@ -133,5 +133,24 @@ describe('contact details', async () => {
     expect(formatMobile('+919876543210')).toBe('+91 98765 43210')
     expect(formatMobile('+14155550100')).toBe('+14155550100')
     expect(whatsappUrl('+919876543210', 'Hi & bye')).toBe('https://wa.me/919876543210?text=Hi%20%26%20bye')
+  })
+})
+
+describe('classLabel', () => {
+  it("names every class the way the school's list does", () => {
+    const pairs: Array<[string, string]> = [
+      ['Playgroup · Half day (morning)', 'Playgroup Morning'], ['Playgroup · Half day (afternoon)', 'Playgroup Afternoon'],
+      ['Playgroup · 360°', 'Playgroup 360'], ['Playgroup · 360°+', 'Playgroup 360 plus'], ['Nursery · Half day (afternoon)', 'Nursery Afternoon'],
+      ['Jr KG · Half day', 'Junior KG Half day'], ['Jr KG · 360°', 'Junior KG 360'], ['Jr KG · 360°+', 'Junior KG 360 plus'],
+      ['Sr KG · Half day', 'Senior KG Half day'], ['Sr KG · 360°', 'Senior KG 360'], ['Sr KG · 360°+', 'Senior KG 360 plus'],
+      ['Learning Center', 'Learning Center'], ['After School Program', 'After School Program'],
+    ]
+    for (const [stored, label] of pairs) expect(classLabel(stored)).toBe(label)
+  })
+  it('orders classes by level, then morning, afternoon, 360, 360 plus, whether stored names or labels', () => {
+    const shuffled = ['Learning Center', 'Sr KG · Half day', 'Nursery 360 plus', 'Playgroup · 360°', 'Playgroup Afternoon', 'Nursery · Half day (morning)', 'Jr KG · 360°+', 'Playgroup · Half day (morning)']
+    expect([...shuffled].sort(byClassOrder).map(classLabel)).toEqual([
+      'Playgroup Morning', 'Playgroup Afternoon', 'Playgroup 360', 'Nursery Morning', 'Nursery 360 plus', 'Junior KG 360 plus', 'Senior KG Half day', 'Learning Center',
+    ])
   })
 })

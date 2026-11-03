@@ -26,6 +26,7 @@ import { AbsenceSheet } from './ParentPages'
 import { useMyAnnouncements } from './parentData'
 import { useToast } from '../../ui/Toast'
 import { explainDbError } from '../admin/api'
+import { classLabel } from '../../domain/programme'
 
 interface ChildRow {
   id: string
@@ -212,7 +213,7 @@ function ChildCard({ child, trips, nowMs, meId, attendance, times, onChanged }: 
     const w = windowFor(p, d)
     const when = p.windows === 'flexible' ? (d === 'pickup' ? `By ${formatTime(p.hours.to)}` : `From ${formatTime(p.hours.from)}`) : formatTime(w.from)
     const range = p.windows === 'flexible' ? `${formatRange(p.hours)}, any time` : formatRange(w)
-    return { value: when, detail: todays.length ? `${p.name}, ${range}` : `${range}, no class today` }
+    return { value: when, detail: todays.length ? `${classLabel(p.name)}, ${range}` : `${range}, no class today` }
   }
   // Drop-off first; after it (or once its time has clearly passed) the pickup.
   const dropoffOver = programme ? today.minutes > (programme.windows === 'flexible' ? programme.hours.from + 180 : windowFor(programme, 'dropoff').to + 30) : true
@@ -243,7 +244,7 @@ function ChildCard({ child, trips, nowMs, meId, attendance, times, onChanged }: 
         <Avatar name={first} color={childColor(child.id)} size="lg" />
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-h2">{first}</h2>
-          <p className="truncate text-small font-semibold text-ink-2">{rows.map((p) => p.name).join(' + ') || 'No programme yet'}</p>
+          <p className="truncate text-small font-semibold text-ink-2">{rows.map((p) => classLabel(p.name)).join(' + ') || 'No class yet'}</p>
         </div>
         {status}
       </div>

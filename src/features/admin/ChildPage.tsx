@@ -20,6 +20,7 @@ import { PasswordSheet } from './PasswordSheet'
 import { formatAge, levelOf } from './programmeCatalogue'
 import { AlsoInSheet, levelIcon, ProgrammePicker } from './ProgrammePicker'
 import { PronunciationCard } from './PronunciationCard'
+import { classLabel } from '../../domain/programme'
 
 const hm = (t?: string | null) => (t ? formatTime(toMinutes(t.slice(0, 5))) : '')
 
@@ -178,7 +179,7 @@ export function ChildPage({ dir, child, onBack, onChanged }: { dir: Directory; c
                   <li key={p.id} className="flex items-center gap-3 rounded-lg bg-sunken px-3.5 py-2.5">
                     <span className="grid size-9 shrink-0 place-items-center rounded-sm bg-surface text-accent [&_svg]:size-5" aria-hidden>{levelIcon(levelOf(p).level)}</span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-h4">{p.name}</span>
+                      <span className="block truncate text-h4">{classLabel(p.name)}</span>
                       <span className="block text-small font-semibold text-ink-2 tabular-nums">{hm(p.starts)} to {hm(p.ends)}</span>
                     </span>
                   </li>

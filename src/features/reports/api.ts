@@ -1,5 +1,6 @@
 import { supabase } from '../../lib/supabase'
 import type { ReportData } from './engine'
+import { classLabel } from '../../domain/programme'
 
 /** Said when a file maker or font of the build this page opened with is gone (a deploy since). */
 export const NEW_VERSION = 'A new version of Jumpstart Go was installed since this page opened. Reload the page, then download again.'
@@ -10,7 +11,9 @@ export interface Filters { from: string; to: string; classId: string | null; pro
 export async function loadReport(f: Filters): Promise<ReportData> {
   const { data, error } = await supabase.rpc('attendance_report', { p_from: f.from, p_to: f.to, p_class: f.classId, p_programme: f.programmeId, p_child: f.childId })
   if (error) throw new Error(error.message.replace(/^[a-z_]+: /, ''))
-  return data as ReportData
+  const report = data as ReportData
+  // Class and programme are one thing: the child's main programme in the school's words, grouped by that programme.
+  return { ...report, rows: report.rows.map((r) => ({ ...r, class: classLabel(r.programme), class_id: r.programme, programme: classLabel(r.programme) })) }
 }
 
 export interface Option { id: string; name: string }

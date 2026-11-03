@@ -9,6 +9,7 @@ import { useTodayTrips, type Trip } from '../trips/api'
 import { programmeOf } from '../trips/rules'
 import { useToday } from './api'
 import { childDay, type ChildDay } from './dayModel'
+import { classLabel } from '../../domain/programme'
 
 export interface Guardian { id: string; full_name: string; phone: string | null; email: string | null; relation: string; kind: 'parent' | 'family'; abroad: boolean; app_access: boolean }
 export interface SchoolChild {
@@ -72,8 +73,8 @@ export function useSchoolDay() {
     const regular = c.child_schedules.find((s) => s.weekday === weekday) ?? null
     const mine = trips.trips!.filter((t) => t.child_id === c.id)
     return {
-      id: c.id, fullName: c.full_name, first: c.preferred_name ?? c.full_name.split(' ')[0]!, gender: c.gender, classId: c.class_id, className: c.classes?.name ?? '',
-      programme, programmeNames: rows.map((p) => p.name).join(' + '), regular, trips: mine,
+      id: c.id, fullName: c.full_name, first: c.preferred_name ?? c.full_name.split(' ')[0]!, gender: c.gender, classId: c.class_id, className: c.programmes ? classLabel(c.programmes.name) : '',
+      programme, programmeNames: rows.map((p) => classLabel(p.name)).join(' + '), regular, trips: mine,
       guardians: c.guardianships.map((g) => ({ ...(people!.get(g.guardian_id) ?? { id: g.guardian_id, full_name: 'Someone no longer listed', phone: null, email: null, abroad: false, app_access: false }), relation: g.relation, kind: g.kind ?? 'parent' })),
       day: childDay({ programmes: todays.length ? todays : all, regular, trips: mine, attendance: attendance.rows!.find((a) => a.child_id === c.id) ?? null, times: times.rows!.filter((t) => t.child_id === c.id) }),
     }

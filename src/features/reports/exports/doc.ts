@@ -59,8 +59,7 @@ export function columns(s: Sections): Column[] {
   const cols: Column[] = [
     { key: 'day', label: 'Date', width: 12, value: (r) => r.day },
     { key: 'child', label: 'Child', width: 22, value: (r) => r.child },
-    { key: 'class', label: 'Class', width: 14, value: (r) => r.class },
-    { key: 'programme', label: 'Programme', width: 22, value: (r) => r.programme },
+    { key: 'class', label: 'Class', width: 22, value: (r) => r.class },
     { key: 'attendance', label: 'Status', width: 12, value: (r) => ATTENDANCE_LABEL[r.attendance] },
     { key: 'record', label: 'Record', width: 12, value: (r) => RECORD_LABEL[r.record] },
     { key: 'sched_in', label: 'Scheduled arrival', width: 11, value: (r) => r.sched_in ?? '' },
