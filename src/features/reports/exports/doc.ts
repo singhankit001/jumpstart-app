@@ -1,8 +1,9 @@
 import { formatTime, indiaClock } from '../../../domain/time'
 import {
-  ATTENDANCE_LABEL, binRange, byClass, classifyAll, dayLabel, exceptions, gateActivity, grainFor, insights, kpis, LATE_MIN, pct,
-  RECORD_LABEL, series, SOURCE_LABEL, timeOf, type Kpis, type PeriodPoint, type ReportData, type Row,
+  ATTENDANCE_LABEL, binRange, byClass, byProgramme, byStudent, classifyAll, dayLabel, exceptions, gateActivity, grainFor, insights, kpis, LATE_MIN, pct,
+  RECORD_LABEL, series, SOURCE_LABEL, timeOf, type GroupLine, type Kpis, type StudentLine, type PeriodPoint, type ReportData, type Row,
 } from '../engine'
+import { byProgrammeOrder } from '../../admin/programmeGroups'
 
 /** The school this app serves (the app has one center). */
 export const CENTER = 'Jumpstart Preschool, Karve Road'
@@ -35,6 +36,9 @@ export interface ReportDoc {
   grainWord: string
   gate: ReturnType<typeof gateActivity>
   classes: ReturnType<typeof byClass>
+  /** By main programme, in the school's order: each child in one, so the lines add up to the report. */
+  programmes: GroupLine[]
+  students: StudentLine[]
   insights: string[]
   exceptions: Row[]
   columns: Column[]
@@ -105,7 +109,7 @@ export function buildDoc(o: { data: ReportData; reportId: string; generatedAt: s
     reportId: o.reportId, generatedAt: o.generatedAt, center: CENTER, scope: o.scope, period,
     cutoff: `${dayLabel(o.data.cutoff)} (data read ${stamp(o.data.generated_at)})`,
     rows, kpis: k, tiles, points, grainWord: grain === 'day' ? 'Daily' : grain === 'week' ? 'Weekly' : 'Monthly',
-    gate: gateActivity(rows), classes: byClass(rows), insights: insights(rows, points), exceptions: exceptions(rows),
+    gate: gateActivity(rows), classes: byClass(rows), programmes: byProgramme(rows, byProgrammeOrder), students: byStudent(rows, byProgrammeOrder), insights: insights(rows, points), exceptions: exceptions(rows),
     columns: columns(sections), sections, theme: o.theme ?? THEMES.navy,
   }
 }

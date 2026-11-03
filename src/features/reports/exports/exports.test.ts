@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { buildDoc, csv, DEFAULT_SECTIONS, safeCell } from './doc'
 import { wordDocument } from './docx'
 import { sampleReport } from './fixture'
-import { workbook } from './xlsx'
+import { SHEETS, TITLE, workbook } from './xlsx'
 
 const keep = (name: string, bytes: ArrayBuffer | string) => {
   const out = process.env.REPORT_SAMPLES
@@ -42,32 +42,91 @@ describe('CSV', () => {
 })
 
 describe('Excel', () => {
-  it('has the summary, a filterable register with a frozen header, real dates and times, and no formulas', async () => {
+  const load = async (bytes: ArrayBuffer) => { const wb = new ExcelJS.Workbook(); await wb.xlsx.load(bytes); return wb }
+  const headers = (ws: ExcelJS.Worksheet) => (ws.getRow(HEAD_ROW).values as unknown[]).slice(1)
+  const HEAD_ROW = 5
+
+  it('has the five sheets, each titled, with a frozen, filtered, print-ready table and no formulas', async () => {
     const d = doc()
     const bytes = await workbook(d)
     keep('report.xlsx', bytes)
-    const wb = new ExcelJS.Workbook()
-    await wb.xlsx.load(bytes)
-    expect(wb.worksheets.map((w) => w.name)).toEqual(['Summary', 'Register', 'Gate activity', 'Classes', 'Definitions'])
-    const reg = wb.getWorksheet('Register')!
-    expect(reg.views[0]).toMatchObject({ state: 'frozen', ySplit: 1 })
-    expect(reg.autoFilter).toBeTruthy()
-    expect(reg.rowCount).toBe(d.rows.length + 1)
-    expect(reg.getCell('A2').value).toBeInstanceOf(Date)
-    const dropoff = d.columns.findIndex((c) => c.key === 'dropoff') + 1
-    const row = d.rows.findIndex((r) => r.dropoffMin !== null) + 2
-    // Stored as a fraction of a day with a time format; read back, Excel's epoch day at that time.
-    const t = reg.getRow(row).getCell(dropoff).value as Date
-    expect(t.getUTCHours() * 60 + t.getUTCMinutes()).toBe(d.rows[row - 2]!.dropoffMin)
-    expect(reg.getRow(row).getCell(dropoff).numFmt).toBe('h:mm AM/PM')
+    const wb = await load(bytes)
+    expect(wb.worksheets.map((w) => w.name)).toEqual([SHEETS.summary, SHEETS.detail, SHEETS.programmes, SHEETS.students, SHEETS.notes])
+    for (const ws of wb.worksheets) {
+      expect(ws.getCell('A1').value).toBe(TITLE)
+      expect(String(ws.getCell('A3').value)).toContain('Reporting period: 1 Oct 2026 – 31 Oct 2026')
+      expect(ws.pageSetup).toMatchObject({ paperSize: 9, fitToWidth: 1, fitToHeight: 0 })
+      expect(ws.pageSetup.printArea).toMatch(/^A1:[A-Z]+\d+$/)
+    }
+    for (const name of [SHEETS.detail, SHEETS.programmes, SHEETS.students]) {
+      const ws = wb.getWorksheet(name)!
+      expect(ws.views[0]).toMatchObject({ state: 'frozen', ySplit: HEAD_ROW })
+      expect(ws.autoFilter).toBeTruthy()
+      expect(ws.pageSetup.printTitlesRow).toBe('5:5')
+      // No empty columns: every column has a header.
+      expect(headers(ws).every((h) => typeof h === 'string' && h.length > 0)).toBe(true)
+      expect(headers(ws).length).toBe(ws.columnCount)
+    }
     let formulas = 0
     wb.eachSheet((ws) => ws.eachRow((r) => r.eachCell((c) => { if (c.type === ExcelJS.ValueType.Formula) formulas++ })))
     expect(formulas).toBe(0)
-    // The formula-like name is kept exactly, as a text cell.
-    const childCol = d.columns.findIndex((c) => c.key === 'child') + 1
-    const found = reg.getColumn(childCol).values.find((v) => typeof v === 'string' && v.startsWith('=HYPERLINK'))
-    expect(found).toBe('=HYPERLINK("http://evil.example","Click")')
   })
+
+  it('lists every child-day with real dates and times, and keeps formula-like names as plain text', async () => {
+    const d = doc()
+    const wb = await load(await workbook(d))
+    const ws = wb.getWorksheet(SHEETS.detail)!
+    expect(ws.rowCount).toBe(HEAD_ROW + d.rows.length)
+    expect(headers(ws).slice(0, 5)).toEqual(['Date', 'Student', 'Programme', 'Class', 'Attendance status'])
+    expect(ws.getCell(HEAD_ROW + 1, 1).value).toBeInstanceOf(Date)
+    expect(ws.getCell(HEAD_ROW + 1, 1).numFmt).toBe('dd mmm yyyy')
+    const withDropoff = ws.getColumn(6).values.findIndex((v, i) => i > HEAD_ROW && v instanceof Date)
+    expect(ws.getCell(withDropoff, 6).numFmt).toBe('h:mm AM/PM')
+    const names = ws.getColumn(2).values
+    expect(names).toContain('=HYPERLINK("http://evil.example","Click")')
+    expect(names).toContain('आरव शर्मा')
+    // Statuses are the engine's, child-day for child-day.
+    const statuses = ws.getColumn(5).values.slice(HEAD_ROW + 1) as string[]
+    expect(statuses.filter((s) => s === 'Absent').length).toBe(d.kpis.counts.absent)
+    expect(statuses.filter((s) => s === 'Not recorded').length).toBe(d.kpis.counts.notRecorded)
+  })
+
+  it('adds up: programme lines total the whole report, and student lines match the engine', async () => {
+    const d = doc()
+    const wb = await load(await workbook(d))
+    const ws = wb.getWorksheet(SHEETS.programmes)!
+    const body = ws.getRows(HEAD_ROW + 1, d.programmes.length)!.map((r) => r.values as unknown[])
+    const total = ws.getRow(HEAD_ROW + d.programmes.length + 1).values as unknown[]
+    expect(total[1]).toBe('All programmes')
+    for (const col of [2, 3, 4, 5, 6, 7]) expect(body.reduce((s, r) => s + (r[col] as number), 0)).toBe(total[col])
+    expect(total[2]).toBe(new Set(d.rows.map((r) => r.child_id)).size)
+    expect(total[4]).toBe(d.kpis.counts.present + d.kpis.counts.late)
+    expect(total[8]).toBeCloseTo(d.kpis.attendanceRate!, 10)
+    const st = wb.getWorksheet(SHEETS.students)!
+    expect(st.rowCount).toBe(HEAD_ROW + d.students.length)
+    const sum = (col: number) => st.getRows(HEAD_ROW + 1, d.students.length)!.reduce((s, r) => s + (r.getCell(col).value as number), 0)
+    expect(sum(5)).toBe(total[4])
+    expect(sum(7)).toBe(total[6])
+  })
+
+  it('opens with no data, and with 1,000 students over a month, long names included', async () => {
+    const empty = await load(await workbook(buildDoc({ data: { ...data, rows: [] }, reportId: 'X', generatedAt: '2026-11-02T07:00:00Z', scope: 'All' })))
+    expect(String(empty.getWorksheet(SHEETS.detail)!.getCell(HEAD_ROW + 1, 1).value)).toMatch(/No attendance records/)
+    const big = sampleReport({ children: 1000, longNames: true })
+    const d = buildDoc({ data: big, reportId: 'JSG-BIG', generatedAt: '2026-11-02T07:00:00Z', scope: 'All' })
+    const started = Date.now()
+    const bytes = await workbook(d)
+    keep('report-1000.xlsx', bytes)
+    const ms = Date.now() - started
+    const wb = await load(bytes)
+    expect(wb.getWorksheet(SHEETS.students)!.rowCount).toBe(HEAD_ROW + 1000)
+    expect(wb.getWorksheet(SHEETS.detail)!.rowCount).toBe(HEAD_ROW + d.rows.length)
+    // The long name wraps onto more lines instead of being cut off.
+    const long = wb.getWorksheet(SHEETS.students)!.getRows(HEAD_ROW + 1, 1000)!.find((r) => String(r.getCell(1).value).startsWith('Aaradhya'))!
+    expect(long.getCell(1).alignment.wrapText).toBe(true)
+    expect(long.height).toBeGreaterThan(15)
+    expect(ms).toBeLessThan(60_000)
+  }, 120_000)
 })
 
 describe('Word', () => {
