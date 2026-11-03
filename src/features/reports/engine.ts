@@ -299,6 +299,40 @@ export function byClass(rows: readonly Row[]): ClassLine[] {
   }).sort((a, b) => a.name.localeCompare(b.name))
 }
 
+// Programmes and students --------------------------------------------------------------------------------------------------
+
+export interface GroupLine { name: string; students: number; present: number; late: number; absent: number; notRecorded: number; due: number; rate: number | null; latePickups: number; incomplete: number }
+const lineOf = (name: string, list: readonly Row[]): GroupLine => {
+  const k = kpis(list)
+  const c = k.counts
+  return {
+    name, students: new Set(list.map((r) => r.child_id)).size, present: c.present + c.late, late: c.late, absent: c.absent, notRecorded: c.notRecorded,
+    due: c.present + c.late + c.absent + c.notRecorded, rate: k.attendanceRate, latePickups: k.latePickups, incomplete: k.incomplete,
+  }
+}
+
+/** One line per main programme (each child in one, so the lines add up to the whole report), in the given order. */
+export function byProgramme(rows: readonly Row[], order: (a: string, b: string) => number = (a, b) => a.localeCompare(b)): GroupLine[] {
+  const by = new Map<string, Row[]>()
+  for (const r of rows) by.set(r.programme, [...(by.get(r.programme) ?? []), r])
+  return [...by.entries()].map(([name, list]) => lineOf(name, list)).sort((a, b) => order(a.name, b.name))
+}
+
+export interface StudentLine extends GroupLine { childId: string; class: string; programme: string; lateArrivals: number; verifiedDropoffs: number; verifiedPickups: number }
+/** One line per student: their days in the period, by status, sorted by programme then name. */
+export function byStudent(rows: readonly Row[], order: (a: string, b: string) => number = (a, b) => a.localeCompare(b)): StudentLine[] {
+  const by = new Map<string, Row[]>()
+  for (const r of rows) by.set(r.child_id, [...(by.get(r.child_id) ?? []), r])
+  return [...by.entries()].map(([childId, list]) => {
+    const first = list[0]!
+    return {
+      ...lineOf(first.child, list), childId, class: first.class, programme: first.programme,
+      lateArrivals: list.filter((r) => r.lateArrivalMin !== null).length,
+      verifiedDropoffs: list.filter((r) => r.dropoffVerified).length, verifiedPickups: list.filter((r) => r.pickupVerified).length,
+    }
+  }).sort((a, b) => order(a.programme, b.programme) || a.name.localeCompare(b.name, 'en-IN'))
+}
+
 // Words -------------------------------------------------------------------------------------------------------------------
 
 export const pct = (v: number | null, digits = 1) => (v === null ? '—' : `${(v * 100).toFixed(digits)}%`)

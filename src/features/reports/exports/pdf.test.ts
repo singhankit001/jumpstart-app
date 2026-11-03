@@ -76,3 +76,18 @@ describe('detailed PDF', () => {
     expect(pagesOf(empty)).toBe(1)
   })
 })
+
+describe('detailed PDF by programme', () => {
+  it('compares programmes when a class has several, and the lines add up to the report', () => {
+    const data = sampleReport()
+    // Two programmes in every class: half of each class on a different plan.
+    const mixed = { ...data, rows: data.rows.map((r) => (Number(r.child_id.slice(1)) % 2 ? { ...r, programme: `${r.class} · 360°` } : r)) }
+    const d = doc(mixed)
+    expect(d.programmes.length).toBe(6)
+    expect(d.programmes.reduce((s, p) => s + p.students, 0)).toBe(new Set(d.rows.map((r) => r.child_id)).size)
+    expect(d.programmes.reduce((s, p) => s + p.due, 0)).toBe(d.kpis.counts.present + d.kpis.counts.late + d.kpis.counts.absent + d.kpis.counts.notRecorded)
+    const pdf = detailedPdf(d, assets)
+    keep('detailed-by-programme.pdf', pdf)
+    expect(pagesOf(pdf)).toBeGreaterThan(1)
+  })
+})

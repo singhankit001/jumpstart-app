@@ -13,7 +13,8 @@ import { barChart, lineChart } from './charts'
 import { BarList, Chart } from './ChartCards'
 import { binRange, dayLabel, pct, ATTENDANCE_LABEL, type ReportData, type Row } from './engine'
 import { buildDoc, type ReportDoc } from './exports/doc'
-import { ClassList } from './ClassList'
+import { StudentGroups, type Group } from './ClassList'
+import { groupByProgramme } from '../admin/programmeGroups'
 import { Register } from './Register'
 import { Studio } from './Studio'
 
@@ -37,6 +38,7 @@ export function ReportsPage({ area }: { area: 'admin' | 'core' | 'coordinator' }
   const canCorrect = state.status === 'signed-in' && !!state.me?.roles.includes('admin')
   const today = todayInIndia()
   const [tab, setTab] = useState<Tab>('classes')
+  const [groupBy, setGroupBy] = useState<'class' | 'programme'>('class')
   const [preset, setPreset] = useState<Preset>('month')
   const [range, setRange] = useState(() => rangeOf('month', today)!)
   const [programmeId, setProgrammeId] = useState('')
@@ -76,6 +78,16 @@ export function ReportsPage({ area }: { area: 'admin' | 'core' | 'coordinator' }
   // The dashboard's figures come from the same document builder as every download.
   const doc = useMemo(() => (data ? buildDoc({ data, reportId: '', generatedAt: data.generated_at, scope }) : null), [data, scope])
 
+  // With a programme chosen, only its students (by main programme, or anyone with a row in it as an extra one).
+  const inScope = useMemo(() => {
+    const all = options?.students ?? []
+    if (!programmeId || !doc) return all
+    const seen = new Set(doc.rows.map((r) => r.child_id))
+    return all.filter((s) => s.programme_id === programmeId || seen.has(s.id))
+  }, [options, programmeId, doc])
+  const classGroups: Group[] = (options?.classes ?? []).map((c) => ({ id: c.id, name: c.name, kids: inScope.filter((s) => s.class_id === c.id) }))
+  const programmeGroups: Group[] = groupByProgramme(inScope, options?.programmes ?? [], (s) => s.programme_id, (s) => s.full_name).map((g) => ({ id: g.id, name: g.name, kids: g.items }))
+
   const pick = (p: Preset) => { setPreset(p); const r = rangeOf(p, today); if (r) setRange(r) }
 
   return (
@@ -100,7 +112,7 @@ export function ReportsPage({ area }: { area: 'admin' | 'core' | 'coordinator' }
         </div>
         {optionsFailed && (
           <Notice tone="warning">
-            Couldn't load the classes, students and programmes, so students can't be shown by class.{' '}
+            Couldn't load the classes, students and programmes, so students can't be shown by class or programme.{' '}
             <button type="button" className="inline-flex min-h-11 items-center font-extrabold text-accent-ink underline underline-offset-2" onClick={loadLists}>Try again</button>
           </Notice>
         )}
@@ -113,7 +125,7 @@ export function ReportsPage({ area }: { area: 'admin' | 'core' | 'coordinator' }
 
       <div className="mt-6">
         <Tabs id="reports" label="Reports" value={tab} onChange={setTab} items={[
-          { key: 'classes', label: 'Classes', icon: <GraduationCap /> },
+          { key: 'classes', label: 'Students', icon: <GraduationCap /> },
           { key: 'overview', label: 'Overview', icon: <BarChart3 /> },
           { key: 'register', label: 'Register', icon: <ListChecks />, count: doc?.exceptions.length || null },
           { key: 'downloads', label: 'Downloads', icon: <Download /> },
@@ -123,7 +135,16 @@ export function ReportsPage({ area }: { area: 'admin' | 'core' | 'coordinator' }
       <div id="reports-panel" role="tabpanel" aria-labelledby={`reports-${tab}`} className="mt-5" aria-busy={loading}>
         {error ? <ErrorState title="Couldn't load attendance" onRetry={load}>{error}</ErrorState>
           : !doc || reading ? <SkeletonList count={6} className="grid gap-3 md:grid-cols-3" height="h-[120px]" />
-          : tab === 'classes' ? <ClassList classes={options?.classes ?? []} students={options?.students ?? []} rows={doc.rows} oneDay={range.from === range.to} />
+          : tab === 'classes' ? (
+            <div className="grid gap-3">
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Group students">
+                {(['class', 'programme'] as const).map((g) => (
+                  <button key={g} type="button" className="choice min-h-11 px-4 py-2 text-small font-bold" aria-pressed={groupBy === g} onClick={() => setGroupBy(g)}>By {g}</button>
+                ))}
+              </div>
+              <StudentGroups key={groupBy} noun={groupBy} groups={groupBy === 'class' ? classGroups : programmeGroups} rows={doc.rows} oneDay={range.from === range.to} />
+            </div>
+          )
           : tab === 'overview' ? <Overview doc={doc} today={today} onOpen={() => setTab('register')} />
           : tab === 'register' ? <Register doc={doc} canCorrect={canCorrect} onChanged={load} />
           : <Studio filters={filters} scope={scope} rows={doc.rows} />}

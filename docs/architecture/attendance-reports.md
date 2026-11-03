@@ -8,6 +8,20 @@ figures; tapping a class opens its students. For one day each student shows chec
 out" when dropped off and not collected) and status; for a longer period, days present, late, absent and not
 recorded. There is no class picker. Gate roles reach the page from the Attendance tab at `/coordinator/reports`.
 
+## Students by programme
+
+A student's programme is their saved main programme (`children.programme_id`, which gives the class); other
+programmes they attend (`child_programmes`) show beside it. Each student is in exactly one programme group, so group
+counts add up to the whole school, and the same rule feeds the screen, the PDF and Excel
+(`src/features/admin/programmeGroups.ts`). Groups follow the school's order (Playgroup to Sr KG, then the standalone
+programmes). A child whose programme isn't active is listed under "Programme not assigned", never under a guessed one.
+
+- **Admin → People → Children:** chips for All students and each programme with students (with counts), sections per
+  programme, names A–Z or Z–A, search by child, parent, phone or any programme the child attends.
+- **Attendance & Reports → Students:** By class or By programme, each section with the period's figures per student,
+  and a search by student, class or programme name. The register's search also matches class and programme.
+- The report's Programme filter (0062) includes children who attend that programme as an extra one.
+
 ## Data: `attendance_report` (0062)
 
 One row per child and day in the period, up to today (India time), for children who were expected or have anything
@@ -45,6 +59,15 @@ parent's name.
 ## Downloads
 
 Made in the browser and never stored: executive one-page A4 landscape PDF, detailed numbered PDF, Excel, Word, CSV.
+
+The Excel workbook (`exports/xlsx.ts`) is titled JUMPSTART GO — ATTENDANCE REPORT on every sheet, with the centre,
+period and generation time: **Executive Summary** (report details, enrolment by programme, attendance, pickup and
+drop-off activity, observations), **Detailed Attendance** (one row per child-day, only when the register is included),
+**Programme-wise Report** (with an All programmes total row outside the filter), **Student-wise Summary** and
+**Notes**. Each table has a frozen, filtered header repeated on printed pages, A4 fit-to-width, real dates and times,
+wrapped long names and banded rows. Totals are values, not formulas. Names are text cells, so a name starting with "="
+never runs as a formula. Tested at 1,000 students for a month (20,000 rows).
+The detailed PDF compares programmes after classes, unless it would repeat the class table (one programme per class).
 The detailed PDF (A4 landscape) opens with a summary (students in scope, present, confirmed absent, late arrivals,
 completed check-outs, incomplete records; no figures at all when nothing matches), then the classes compared, then
 one section per class: its rows sorted by student and date, the column header repeated on each page it continues to,

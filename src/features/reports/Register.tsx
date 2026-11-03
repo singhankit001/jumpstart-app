@@ -58,7 +58,7 @@ export function Register({ doc, canCorrect, onChanged }: { doc: ReportDoc; canCo
     const needle = q.trim().toLocaleLowerCase('en-IN')
     const col = COLS.find((c) => c.key === sort.key)!
     return doc.rows
-      .filter((r) => (!needle || r.child.toLocaleLowerCase('en-IN').includes(needle)) && (!status || r.attendance === status) && (!record || r.record === record) && (!onlyIssues || r.issues.length > 0))
+      .filter((r) => (!needle || [r.child, r.class, r.programme].some((x) => x.toLocaleLowerCase('en-IN').includes(needle))) && (!status || r.attendance === status) && (!record || r.record === record) && (!onlyIssues || r.issues.length > 0))
       .sort((a, b) => {
         const x = col.sort(a)
         const y = col.sort(b)
@@ -74,7 +74,7 @@ export function Register({ doc, canCorrect, onChanged }: { doc: ReportDoc; canCo
   return (
     <div className="grid gap-4">
       <div className="card grid gap-3 rounded-xl p-4 md:grid-cols-[1.4fr_1fr_1fr_auto] md:items-end">
-        <SearchField label="Find a child" placeholder="Name" value={q} onChange={(e) => { setQ(e.target.value); reset() }} />
+        <SearchField label="Find a child" placeholder="Child, class or programme" value={q} onChange={(e) => { setQ(e.target.value); reset() }} />
         <SelectField label="Status" value={status} onValue={(v) => { setStatus(v as typeof status); reset() }}>
           <option value="">Any status</option>
           {(['present', 'late', 'absent', 'not_recorded', 'expected'] as const).map((s) => <option key={s} value={s}>{ATTENDANCE_LABEL[s]}</option>)}

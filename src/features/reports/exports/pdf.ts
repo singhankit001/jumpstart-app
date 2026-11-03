@@ -263,7 +263,7 @@ export function executivePdf(d: ReportDoc, a: PdfAssets): ArrayBuffer {
   return doc.output('arraybuffer')
 }
 
-// The detailed register: a summary, the classes compared, then each class's rows, as many A4 landscape pages as it takes --
+// The detailed register: a summary, the classes and programmes compared, then each class's rows, as many A4 landscape pages as it takes --
 
 /** "9:05 AM", the same clock as the dashboard; null when there is no time. */
 const clock = (min: number | null) => (min === null ? null : formatTime(min))
@@ -337,35 +337,46 @@ export function detailedPdf(d: ReportDoc, a: PdfAssets): ArrayBuffer {
     y += 21 + 7
   }
 
-  // 2. The classes compared, when there is more than one.
-  if (d.classes.length > 1) {
-    const cc: Array<[string, number, 'right' | undefined]> = [['Class', 70, undefined], ['Students', 24, 'right'], ['Present', 24, 'right'], ['Absent', 24, 'right'], ['Late arrivals', 28, 'right'], ['Not recorded', 28, 'right'], ['Incomplete', 26, 'right'], ['Attendance', 26, 'right']]
+  // 2. The classes, then the programmes, compared, when there is more than one.
+  const compare = (title: string, first: string, lines: string[][]) => {
+    const cc: Array<[string, number, 'right' | undefined]> = [[first, 70, undefined], ['Students', 24, 'right'], ['Present', 24, 'right'], ['Absent', 24, 'right'], ['Late arrivals', 28, 'right'], ['Not recorded', 28, 'right'], ['Incomplete', 26, 'right'], ['Attendance', 26, 'right']]
     const k2 = fullW / cc.reduce((s, c) => s + c[1], 0)
     for (const c of cc) c[1] *= k2
-    const cw = fullW
     need(5 + 6 + 5.5 * 2)
-    label('By class')
+    label(title)
     const head = () => {
-      doc.setFillColor(TILE); doc.rect(M, y, cw, 6, 'F')
+      doc.setFillColor(TILE); doc.rect(M, y, fullW, 6, 'F')
       font(doc, 'semibold', 6.8, INK2)
       let x = M
       for (const [l, w, al] of cc) { doc.text(l, al ? x + w - pad : x + pad, y + 3, { baseline: 'middle', align: al ?? 'left' }); x += w }
       y += 6
     }
     head()
-    for (const c of d.classes) {
+    for (const vals of lines) {
       need(5.5)
       if (y === top) head()
-      const list = d.rows.filter((r) => r.class_id === c.classId)
-      const vals = [c.name, String(new Set(list.map((r) => r.child_id)).size), String(c.present), String(list.filter((r) => r.attendance === 'absent').length),
-        String(list.filter((r) => r.lateArrivalMin !== null).length), String(list.filter((r) => r.attendance === 'not_recorded').length), String(c.incomplete), pct(c.rate)]
       font(doc, 'normal', 7.2)
       let x = M
       cc.forEach(([, w, al], i) => { doc.text(fit(doc, vals[i]!, w - 2 * pad), al ? x + w - pad : x + pad, y + 2.75, { baseline: 'middle', align: al ?? 'left' }); x += w })
-      doc.setDrawColor(LINE); doc.setLineWidth(0.2); doc.line(M, y + 5.5, M + cw, y + 5.5)
+      doc.setDrawColor(LINE); doc.setLineWidth(0.2); doc.line(M, y + 5.5, M + fullW, y + 5.5)
       y += 5.5
     }
     y += 7
+  }
+  if (d.classes.length > 1) {
+    compare('By class', 'Class', d.classes.map((c) => {
+      const list = d.rows.filter((r) => r.class_id === c.classId)
+      return [c.name, String(new Set(list.map((r) => r.child_id)).size), String(c.present), String(list.filter((r) => r.attendance === 'absent').length),
+        String(list.filter((r) => r.lateArrivalMin !== null).length), String(list.filter((r) => r.attendance === 'not_recorded').length), String(c.incomplete), pct(c.rate)]
+    }))
+  }
+  // Left out when it would repeat the class table (one programme per class).
+  const sameAsClasses = d.programmes.length === d.classes.length && d.programmes.every((p) => new Set(d.rows.filter((r) => r.programme === p.name).map((r) => r.class_id)).size === 1)
+  if (d.programmes.length > 1 && !sameAsClasses) {
+    compare('By programme', 'Programme', d.programmes.map((p) => {
+      const late = d.rows.filter((r) => r.programme === p.name && r.lateArrivalMin !== null).length
+      return [p.name, String(p.students), String(p.present), String(p.absent), String(late), String(p.notRecorded), String(p.incomplete), pct(p.rate)]
+    }))
   }
 
   // 3. Each class: a heading, the column header (again on every page it continues to), then whole rows only.
