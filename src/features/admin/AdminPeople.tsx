@@ -24,6 +24,8 @@ import { useAfterImport } from './importJob'
 import { levelOf } from './programmeCatalogue'
 import { levelIcon } from './ProgrammePicker'
 import { ROLE } from './roles'
+import { groupByProgramme } from './programmeGroups'
+import { ProgrammeChips } from './ProgrammeChips'
 
 type Tab = 'children' | 'staff' | 'classes'
 
@@ -42,6 +44,9 @@ export function AdminPeople() {
   const [tab, setTab] = useState<Tab>('children')
   const [editingStaff, setEditingStaff] = useState<Profile | null>(null)
   const [query, setQuery] = useState('')
+  // null: All students; '' : Programme not assigned; else a programme id.
+  const [programme, setProgramme] = useState<string | null>(null)
+  const [order, setOrder] = useState<'asc' | 'desc'>('asc')
   const [adding, setAdding] = useState<null | 'child' | 'staff' | 'class'>(null)
   const [openClass, setOpenClass] = useState<string | null>(null)
   const [inviting, setInviting] = useState<Profile | null>(null)
@@ -113,7 +118,7 @@ export function AdminPeople() {
     }
   }
 
-  const none = <EmptyState title={`No one matches "${query.trim()}"`}>Try a first name or part of a phone number.</EmptyState>
+  const none = <EmptyState title={`No one matches "${query.trim()}"`}>Try a first name, part of a phone number{tab === 'children' ? ' or a programme' : ''}.</EmptyState>
   const contact = (p: Profile) => p.phone ? formatMobile(p.phone) : 'No contact details'
   const TABS: Array<{ key: Tab; label: string; short?: string; icon: ReactNode }> = [
     { key: 'children', label: 'Children', icon: <Baby /> },
@@ -128,7 +133,7 @@ export function AdminPeople() {
         : <><LuxButton icon={<FileSpreadsheet />} onClick={() => setBulk(true)}>Bulk upload</LuxButton><LuxButton primary icon={<Plus />} onClick={() => setAdding('child')}>Add child</LuxButton></>}>
       <div className="mt-6 flex flex-col gap-3 lg:flex-row lg:items-center">
         <Tabs id="people" label="People" value={tab} onChange={setTab} items={TABS.map((t) => ({ ...t, count: lists ? lists[t.key].length : null }))} />
-        <SearchField label="Search people" className="min-w-0 lg:flex-1" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search names or phones" />
+        <SearchField label="Search people" className="min-w-0 lg:flex-1" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={tab === 'children' ? 'Child, parent or programme' : 'Search names or phones'} />
       </div>
       {actionError && !confirm && <Notice tone="danger" className="mt-4">{actionError}</Notice>}
 
@@ -136,9 +141,24 @@ export function AdminPeople() {
         {loadError ? <ErrorState title="Couldn't load people" onRetry={() => void reload()}>{loadError}</ErrorState>
           : !dir || !lists ? <SkeletonList />
           : tab === 'children' ? (
-            lists.children.length === 0 ? (q ? none : <EmptyState title="No children yet" action={<LuxButton primary icon={<Plus />} onClick={() => setAdding('child')}>Add child</LuxButton>}>Add each child with their parents and family in one step.</EmptyState>) : (
+            lists.children.length === 0 ? (q ? none : <EmptyState title="No children yet" action={<LuxButton primary icon={<Plus />} onClick={() => setAdding('child')}>Add child</LuxButton>}>Add each child with their parents and family in one step.</EmptyState>) : (() => {
+              const groups = groupByProgramme(lists.children, dir.programmes, (c) => c.programme_id, (c) => c.full_name, order)
+              const shown = programme === null ? groups : groups.filter((g) => g.id === programme)
+              return (
+                <>
+                  <ProgrammeChips groups={groups} value={programme} onChange={setProgramme} order={order} onOrder={setOrder} />
+                  {shown.length === 0 ? (
+                    <EmptyState title="No children in this programme" action={<Button variant="secondary" onClick={() => setProgramme(null)}>Show all students</Button>}>
+                      {q ? `No child in this programme matches "${query.trim()}".` : 'Nobody is in this programme now.'}
+                    </EmptyState>
+                  ) : shown.map((g) => (
+                    <section key={g.id || 'none'} className="mt-5 first-of-type:mt-4" aria-labelledby={`prog-${g.id || 'none'}`}>
+                      <h2 id={`prog-${g.id || 'none'}`} className={`mb-3 flex items-baseline gap-2 text-h4 ${g.id ? '' : 'text-warning'}`}>
+                        {g.name}<span className="text-small font-semibold text-ink-2 tabular-nums">{g.items.length} {g.items.length === 1 ? 'student' : 'students'}</span>
+                      </h2>
+                      {!g.id && <p className="-mt-2 mb-3 text-small font-semibold text-ink-2">These children's saved programme isn't active. Open a child to choose their programme.</p>}
               <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {lists.children.map((c) => {
+                {g.items.map((c) => {
                   const programmes = programmesOf(dir, c).map((p) => p.name).join(' + ')
                   const people = peopleOf(c.id)
                   return (
@@ -148,7 +168,7 @@ export function AdminPeople() {
                           <Avatar name={c.preferred_name ?? c.full_name} color={childColor(c.id)} />
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-h3">{c.full_name}</span>
-                            <span className="line-clamp-2 text-small font-semibold text-ink-2">{programmes || 'No programme'}</span>
+                            <span className="line-clamp-2 text-small font-semibold text-ink-2">{programmes || 'Programme not assigned'}</span>
                           </span>
                           <span className="grid size-9 shrink-0 place-items-center rounded-full bg-sunken [&_svg]:size-5" aria-hidden><ChevronRight /></span>
                         </span>
@@ -179,7 +199,11 @@ export function AdminPeople() {
                   )
                 })}
               </ul>
-            )
+                    </section>
+                  ))}
+                </>
+              )
+            })()
           ) : tab === 'staff' ? (
             <>
               <div className="card mb-4 flex items-start gap-3 rounded-xl p-4">
