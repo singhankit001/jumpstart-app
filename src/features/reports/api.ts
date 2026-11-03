@@ -14,13 +14,13 @@ export async function loadReport(f: Filters): Promise<ReportData> {
 }
 
 export interface Option { id: string; name: string }
-export interface Student { id: string; full_name: string; class_id: string }
+export interface Student { id: string; full_name: string; class_id: string; programme_id: string }
 /** The classes, programmes and every current student (staff read children under 0001's policy). */
 export async function loadOptions(): Promise<{ classes: Option[]; programmes: Option[]; students: Student[] }> {
   const [c, p, s] = await Promise.all([
     supabase.from('classes').select('id, name').order('sort'),
     supabase.from('programmes').select('id, name').eq('active', true).order('name'),
-    supabase.from('children').select('id, full_name, class_id').eq('active', true).order('full_name'),
+    supabase.from('children').select('id, full_name, class_id, programme_id').eq('active', true).order('full_name'),
   ])
   if (c.error || p.error || s.error) throw new Error("Couldn't load the classes, programmes and students.")
   return { classes: (c.data ?? []) as Option[], programmes: (p.data ?? []) as Option[], students: (s.data ?? []) as Student[] }
