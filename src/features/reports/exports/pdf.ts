@@ -263,7 +263,7 @@ export function executivePdf(d: ReportDoc, a: PdfAssets): ArrayBuffer {
   return doc.output('arraybuffer')
 }
 
-// The detailed register: a summary, the classes and programmes compared, then each class's rows, as many A4 landscape pages as it takes --
+// The detailed register: a summary, the classes compared, then each class's rows, as many A4 landscape pages as it takes --
 
 /** "9:05 AM", the same clock as the dashboard; null when there is no time. */
 const clock = (min: number | null) => (min === null ? null : formatTime(min))
@@ -337,7 +337,7 @@ export function detailedPdf(d: ReportDoc, a: PdfAssets): ArrayBuffer {
     y += 21 + 7
   }
 
-  // 2. The classes, then the programmes, compared, when there is more than one.
+  // 2. The classes compared, when there is more than one.
   const compare = (title: string, first: string, lines: string[][]) => {
     const cc: Array<[string, number, 'right' | undefined]> = [[first, 70, undefined], ['Students', 24, 'right'], ['Present', 24, 'right'], ['Absent', 24, 'right'], ['Late arrivals', 28, 'right'], ['Not recorded', 28, 'right'], ['Incomplete', 26, 'right'], ['Attendance', 26, 'right']]
     const k2 = fullW / cc.reduce((s, c) => s + c[1], 0)
@@ -368,14 +368,6 @@ export function detailedPdf(d: ReportDoc, a: PdfAssets): ArrayBuffer {
       const list = d.rows.filter((r) => r.class_id === c.classId)
       return [c.name, String(new Set(list.map((r) => r.child_id)).size), String(c.present), String(list.filter((r) => r.attendance === 'absent').length),
         String(list.filter((r) => r.lateArrivalMin !== null).length), String(list.filter((r) => r.attendance === 'not_recorded').length), String(c.incomplete), pct(c.rate)]
-    }))
-  }
-  // Left out when it would repeat the class table (one programme per class).
-  const sameAsClasses = d.programmes.length === d.classes.length && d.programmes.every((p) => new Set(d.rows.filter((r) => r.programme === p.name).map((r) => r.class_id)).size === 1)
-  if (d.programmes.length > 1 && !sameAsClasses) {
-    compare('By programme', 'Programme', d.programmes.map((p) => {
-      const late = d.rows.filter((r) => r.programme === p.name && r.lateArrivalMin !== null).length
-      return [p.name, String(p.students), String(p.present), String(p.absent), String(late), String(p.notRecorded), String(p.incomplete), pct(p.rate)]
     }))
   }
 

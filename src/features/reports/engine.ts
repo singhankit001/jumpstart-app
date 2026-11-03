@@ -1,5 +1,6 @@
 import { formatTime, indiaClock, toMinutes, weekdayOf, type Minutes } from '../../domain/time'
 import { LATE_THRESHOLD_MIN } from '../../domain/lateness'
+import { byClassOrder } from '../../domain/programme'
 
 /**
  * The reporting engine: the one place attendance statuses, every KPI, every chart series, the insights and the
@@ -289,14 +290,14 @@ export const binRange = (b: Bin) => `${formatTime(b.from)}–${formatTime(b.from
 // Classes -----------------------------------------------------------------------------------------------------------------
 
 export interface ClassLine { classId: string; name: string; rate: number | null; present: number; due: number; latePickups: number; incomplete: number }
-/** The school has one center: classes are compared instead. */
+/** The school has one center: classes (each child's main programme) are compared instead, in the school's order. */
 export function byClass(rows: readonly Row[]): ClassLine[] {
   const by = new Map<string, Row[]>()
   for (const r of rows) by.set(r.class_id, [...(by.get(r.class_id) ?? []), r])
   return [...by.entries()].map(([classId, list]) => {
     const k = kpis(list)
     return { classId, name: list[0]!.class, rate: k.attendanceRate, present: k.counts.present + k.counts.late, due: k.counts.present + k.counts.late + k.counts.absent + k.counts.notRecorded, latePickups: k.latePickups, incomplete: k.incomplete }
-  }).sort((a, b) => a.name.localeCompare(b.name))
+  }).sort((a, b) => byClassOrder(a.name, b.name))
 }
 
 // Programmes and students --------------------------------------------------------------------------------------------------

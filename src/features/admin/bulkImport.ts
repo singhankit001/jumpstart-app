@@ -5,6 +5,7 @@
  */
 import { normalizeMobile } from '../../domain/contact'
 import type { ProgrammeRow } from './api'
+import { classLabel } from '../../domain/programme'
 
 // ---- Reading the file --------------------------------------------------------------------------------------------
 
@@ -189,7 +190,8 @@ export function parseDate(input: string): string | null {
 /** The programme a cell names: "Nursery · 360°", "nursery 360", "NURSERY-360°" all match; 360°+ stays distinct. */
 export function matchProgramme(input: string, programmes: ProgrammeRow[]): ProgrammeRow | null {
   const k = key(input)
-  return k ? programmes.find((p) => key(p.name) === k) ?? null : null
+  // The school's own wording too: "Nursery Afternoon", "Junior KG 360 plus".
+  return k ? programmes.find((p) => key(p.name) === k || key(classLabel(p.name)) === k) ?? null : null
 }
 
 export interface Person { full_name: string; relation: string; kind: 'parent' | 'family'; phone: string; app_access: boolean }

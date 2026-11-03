@@ -16,6 +16,7 @@ import { blankPerson, kindOf, linkByMobile, personErrors, RELATION_GROUPS, relat
 import { formatAge, levelOf, suggestedLevel } from './programmeCatalogue'
 import { AlsoInSheet, levelIcon, ProgrammePicker } from './ProgrammePicker'
 import { GenderChoice } from '../../ui/GenderChoice'
+import { classLabel } from '../../domain/programme'
 
 const RELATION_ICON: Record<string, ReactNode> = {
   Mother: <UserRound />, Father: <UserRound />, 'Legal guardian': <ShieldUser />, Grandmother: <Glasses />, Grandfather: <Glasses />,
@@ -246,7 +247,7 @@ export function AddChildSheet({ dir, open, onClose, onSaved }: { dir: Directory;
         <button type="button" onClick={() => setPicker('programme')} className={`choice flex w-full items-center gap-3.5 p-3.5 text-left ${errors.programme ? '[--edge:var(--danger)]' : ''}`} aria-describedby={errors.programme ? 'programme-msg' : undefined}>
           <span className="grid size-11 shrink-0 place-items-center rounded-sm bg-accent-soft text-accent [&_svg]:size-[22px]" aria-hidden>{programme ? levelIcon(levelOf(programme).level) : <Plus />}</span>
           <span className="min-w-0 flex-1">
-            <span className="block text-h4">{programme ? programme.name : 'Choose the class and programme'}</span>
+            <span className="block text-h4">{programme ? classLabel(programme.name) : 'Choose the class'}</span>
             <span className="block text-small font-semibold text-ink-2">{programme ? 'Change' : suggested ? `${suggested.replace(' Program', '')} is suggested from the date of birth` : 'The class, then the programme'}</span>
           </span>
           <ChevronRight className="size-5 shrink-0 text-ink-3" aria-hidden />

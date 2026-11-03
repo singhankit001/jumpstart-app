@@ -28,6 +28,7 @@ import { isLate, settled, shouldAnnounce, syncGate, type GateChild } from './gat
 import { RequestPopup } from './RequestPopup'
 import { setVoiceOpenings } from './sound'
 import { useGateSettings } from './useGateSettings'
+import { classLabel } from '../../domain/programme'
 
 interface Guardian { id: string; name: string; relation: string; active: boolean; kind: 'parent' | 'family'; abroad: boolean }
 interface GateData {
@@ -104,7 +105,7 @@ function useGateData() {
     type Kid = { id: string; full_name: string; preferred_name: string | null; gender: string | null; class_id: string; classes: { name: string } | null; programmes: { name: string } | null; guardianships: Array<{ guardian_id: string; relation: string; kind: 'parent' | 'family' }> }
     const children = new Map(((kids.data ?? []) as unknown as Kid[]).map((c) => [c.id, {
       id: c.id, name: c.preferred_name ?? c.full_name.split(' ')[0]!, gender: c.gender, fullName: c.full_name, classId: c.class_id,
-      className: c.classes?.name ?? '', programmeName: c.programmes?.name ?? '', spoken: spoken.get(c.id) ?? null,
+      className: c.programmes?.name ? classLabel(c.programmes.name) : c.classes?.name ?? '', programmeName: c.programmes?.name ?? '', spoken: spoken.get(c.id) ?? null,
       guardians: c.guardianships.map((g) => ({ id: g.guardian_id, name: names.get(g.guardian_id)?.full_name ?? 'Guardian', relation: g.relation, active: names.get(g.guardian_id)?.active ?? false, kind: g.kind ?? 'parent', abroad: names.get(g.guardian_id)?.abroad ?? false })),
     }]))
     // The voice says each child's name the way the school approved (D50); the screen always shows it as registered.
@@ -447,7 +448,7 @@ function TripDetail({ trip, child, busy, locked, canClose, onStep }: { trip: Tri
         <div className="min-w-0">
           <p className="kicker">{pickup ? 'Pickup' : 'Drop-off'} · {clockTime(trip.arrive_at)}</p>
           <h3 className="truncate text-h2">{child.fullName}</h3>
-          <p className="truncate text-small font-semibold text-ink-2">{child.programmeName || child.className}</p>
+          <p className="truncate text-small font-semibold text-ink-2">{child.programmeName ? classLabel(child.programmeName) : child.className}</p>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2.5">

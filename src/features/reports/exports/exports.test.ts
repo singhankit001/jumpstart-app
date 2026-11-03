@@ -77,16 +77,16 @@ describe('Excel', () => {
     const wb = await load(await workbook(d))
     const ws = wb.getWorksheet(SHEETS.detail)!
     expect(ws.rowCount).toBe(HEAD_ROW + d.rows.length)
-    expect(headers(ws).slice(0, 5)).toEqual(['Date', 'Student', 'Programme', 'Class', 'Attendance status'])
+    expect(headers(ws).slice(0, 4)).toEqual(['Date', 'Student', 'Class', 'Attendance status'])
     expect(ws.getCell(HEAD_ROW + 1, 1).value).toBeInstanceOf(Date)
     expect(ws.getCell(HEAD_ROW + 1, 1).numFmt).toBe('dd mmm yyyy')
-    const withDropoff = ws.getColumn(6).values.findIndex((v, i) => i > HEAD_ROW && v instanceof Date)
-    expect(ws.getCell(withDropoff, 6).numFmt).toBe('h:mm AM/PM')
+    const withDropoff = ws.getColumn(5).values.findIndex((v, i) => i > HEAD_ROW && v instanceof Date)
+    expect(ws.getCell(withDropoff, 5).numFmt).toBe('h:mm AM/PM')
     const names = ws.getColumn(2).values
     expect(names).toContain('=HYPERLINK("http://evil.example","Click")')
     expect(names).toContain('आरव शर्मा')
     // Statuses are the engine's, child-day for child-day.
-    const statuses = ws.getColumn(5).values.slice(HEAD_ROW + 1) as string[]
+    const statuses = ws.getColumn(4).values.slice(HEAD_ROW + 1) as string[]
     expect(statuses.filter((s) => s === 'Absent').length).toBe(d.kpis.counts.absent)
     expect(statuses.filter((s) => s === 'Not recorded').length).toBe(d.kpis.counts.notRecorded)
   })
@@ -97,7 +97,7 @@ describe('Excel', () => {
     const ws = wb.getWorksheet(SHEETS.programmes)!
     const body = ws.getRows(HEAD_ROW + 1, d.programmes.length)!.map((r) => r.values as unknown[])
     const total = ws.getRow(HEAD_ROW + d.programmes.length + 1).values as unknown[]
-    expect(total[1]).toBe('All programmes')
+    expect(total[1]).toBe('All classes')
     for (const col of [2, 3, 4, 5, 6, 7]) expect(body.reduce((s, r) => s + (r[col] as number), 0)).toBe(total[col])
     expect(total[2]).toBe(new Set(d.rows.map((r) => r.child_id)).size)
     expect(total[4]).toBe(d.kpis.counts.present + d.kpis.counts.late)
@@ -105,8 +105,8 @@ describe('Excel', () => {
     const st = wb.getWorksheet(SHEETS.students)!
     expect(st.rowCount).toBe(HEAD_ROW + d.students.length)
     const sum = (col: number) => st.getRows(HEAD_ROW + 1, d.students.length)!.reduce((s, r) => s + (r.getCell(col).value as number), 0)
-    expect(sum(5)).toBe(total[4])
-    expect(sum(7)).toBe(total[6])
+    expect(sum(4)).toBe(total[4])
+    expect(sum(6)).toBe(total[6])
   })
 
   it('opens with no data, and with 1,000 students over a month, long names included', async () => {

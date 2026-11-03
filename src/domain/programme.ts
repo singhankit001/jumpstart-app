@@ -21,6 +21,32 @@ export interface Programme {
   windows: { dropoff: TimeWindow; pickup: TimeWindow } | 'flexible'
 }
 
+const LEVEL_WORDS: Record<string, string> = { 'Jr KG': 'Junior KG', 'Sr KG': 'Senior KG' }
+const PLAN_WORDS: Record<string, string> = { 'Half day (morning)': 'Morning', 'Half day (afternoon)': 'Afternoon', '360°': '360', '360°+': '360 plus' }
+
+/**
+ * A child's class as the school says it: the stored programme name ("Jr KG · 360°+", which the timings and the gate rules
+ * read) in the school's words ("Junior KG 360 plus"). Class and programme are one thing on every screen and file.
+ */
+export function classLabel(programme: string): string {
+  const [level, plan] = programme.split(' · ') as [string, string | undefined]
+  if (!plan) return programme
+  return `${LEVEL_WORDS[level] ?? level} ${PLAN_WORDS[plan] ?? plan}`
+}
+
+const LEVEL_ORDER = ['Playgroup', 'Nursery', 'Junior KG', 'Senior KG', 'Learning Center', 'Preschool Readiness Program', 'After School Program']
+const levelRank = (label: string) => {
+  const i = LEVEL_ORDER.findIndex((l) => label === l || label.startsWith(`${l} `))
+  return i < 0 ? LEVEL_ORDER.length : i
+}
+const planRank = (label: string) => (/ Morning$| Half day$/.test(label) ? 0 : / Afternoon$/.test(label) ? 1 : / 360$/.test(label) ? 2 : / 360 plus$/.test(label) ? 3 : 4)
+/** The school's order for classes, given as stored names or labels: by level, then morning, afternoon, 360, 360 plus. */
+export function byClassOrder(a: string, b: string): number {
+  const x = classLabel(a)
+  const y = classLabel(b)
+  return levelRank(x) - levelRank(y) || planRank(x) - planRank(y) || x.localeCompare(y, 'en-IN')
+}
+
 /** Everything wrong with a programme, as sentences for the form. Empty when valid. */
 export function programmeErrors(p: Programme): string[] {
   const errors: string[] = []

@@ -6,6 +6,7 @@ import { indiaClock, formatTime } from '../../domain/time'
 import { AreaShell } from '../auth/AreaShell'
 import { explainDbError, loadDirectory } from './api'
 import { describe, type AuditRow, type Names } from './auditText'
+import { classLabel } from '../../domain/programme'
 
 // ponytail: the newest 300 entries; add paging ("Older") when the log is read further back than a few busy days.
 const LIMIT = 300
@@ -29,7 +30,7 @@ export function AuditLog() {
         person,
         child: (id) => { const c = dir.children.find((x) => x.id === id); return c ? c.preferred_name ?? c.full_name.split(' ')[0]! : 'a child' },
         className: (id) => dir.classes.find((c) => c.id === id)?.name ?? 'a class',
-        programme: (id) => dir.programmes.find((p) => p.id === id)?.name ?? 'a programme',
+        programme: (id) => { const p = dir.programmes.find((x) => x.id === id); return p ? classLabel(p.name) : 'a class' },
       }
       const out: Entry[] = []
       for (const r of (log.data ?? []) as AuditRow[]) {

@@ -113,9 +113,9 @@ describe('periods and charts', () => {
     expect(busiest!.from).toBe(9 * 60)                                // tie: the earlier half hour
     expect(gateActivity([]).busiest).toBeNull()
   })
-  it('compares classes', () => {
+  it('compares classes in the school order', () => {
     const lines = byClass([gateDay('2026-03-02'), row({ class_id: 'k2', class: 'Jr KG', marked: 'absent' })].map(c))
-    expect(lines.map((l) => [l.name, l.rate])).toEqual([['Jr KG', 0], ['Nursery', 1]])
+    expect(lines.map((l) => [l.name, l.rate])).toEqual([['Nursery', 1], ['Jr KG', 0]])
   })
 })
 

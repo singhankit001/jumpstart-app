@@ -27,7 +27,6 @@ const COLS: Col[] = [
   { key: 'dropoff', label: 'Drop-off', sort: (r) => r.dropoffMin ?? -1, render: (r) => <Timed time={at(r.dropoff_at)} verified={r.dropoffVerified} late={r.lateArrivalMin} sched={r.sched_in} /> },
   { key: 'pickup', label: 'Pickup', sort: (r) => r.pickupMin ?? -1, render: (r) => <Timed time={at(r.pickup_at)} verified={r.pickupVerified} late={r.latePickupMin} sched={r.sched_out} /> },
   { key: 'announced', label: 'Parent announced', sort: (r) => r.pickup_announced_at ?? '', render: (r) => at(r.pickup_announced_at) },
-  { key: 'programme', label: 'Programme', sort: (r) => r.programme, render: (r) => r.programme },
   { key: 'issues', label: 'Exceptions', sort: (r) => r.issues.length, render: (r) => (r.issues.length ? <span className="text-warning">{r.issues.join('; ')}</span> : '—') },
 ]
 
@@ -49,7 +48,7 @@ export function Register({ doc, canCorrect, onChanged }: { doc: ReportDoc; canCo
   const [status, setStatus] = useState<'' | Attendance>('')
   const [record, setRecord] = useState<'' | RecordState>('')
   const [onlyIssues, setOnlyIssues] = useState(false)
-  const [hidden, setHidden] = useState<Set<string>>(new Set(['announced', 'programme']))
+  const [hidden, setHidden] = useState<Set<string>>(new Set(['announced']))
   const [sort, setSort] = useState<{ key: string; desc: boolean }>({ key: 'day', desc: true })
   const [page, setPage] = useState(0)
   const [open, setOpen] = useState<Row | null>(null)
@@ -58,7 +57,7 @@ export function Register({ doc, canCorrect, onChanged }: { doc: ReportDoc; canCo
     const needle = q.trim().toLocaleLowerCase('en-IN')
     const col = COLS.find((c) => c.key === sort.key)!
     return doc.rows
-      .filter((r) => (!needle || [r.child, r.class, r.programme].some((x) => x.toLocaleLowerCase('en-IN').includes(needle))) && (!status || r.attendance === status) && (!record || r.record === record) && (!onlyIssues || r.issues.length > 0))
+      .filter((r) => (!needle || [r.child, r.class].some((x) => x.toLocaleLowerCase('en-IN').includes(needle))) && (!status || r.attendance === status) && (!record || r.record === record) && (!onlyIssues || r.issues.length > 0))
       .sort((a, b) => {
         const x = col.sort(a)
         const y = col.sort(b)
@@ -74,7 +73,7 @@ export function Register({ doc, canCorrect, onChanged }: { doc: ReportDoc; canCo
   return (
     <div className="grid gap-4">
       <div className="card grid gap-3 rounded-xl p-4 md:grid-cols-[1.4fr_1fr_1fr_auto] md:items-end">
-        <SearchField label="Find a child" placeholder="Child, class or programme" value={q} onChange={(e) => { setQ(e.target.value); reset() }} />
+        <SearchField label="Find a child" placeholder="Child or class" value={q} onChange={(e) => { setQ(e.target.value); reset() }} />
         <SelectField label="Status" value={status} onValue={(v) => { setStatus(v as typeof status); reset() }}>
           <option value="">Any status</option>
           {(['present', 'late', 'absent', 'not_recorded', 'expected'] as const).map((s) => <option key={s} value={s}>{ATTENDANCE_LABEL[s]}</option>)}

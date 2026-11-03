@@ -6,7 +6,7 @@ import { stamp, type ReportDoc } from './doc'
 
 /** The workbook's title on every sheet. */
 export const TITLE = 'JUMPSTART GO — ATTENDANCE REPORT'
-export const SHEETS = { summary: 'Executive Summary', detail: 'Detailed Attendance', programmes: 'Programme-wise Report', students: 'Student-wise Summary', notes: 'Notes' } as const
+export const SHEETS = { summary: 'Executive Summary', detail: 'Detailed Attendance', programmes: 'Class-wise Report', students: 'Student-wise Summary', notes: 'Notes' } as const
 
 const NAVY = 'FF1D3461'
 const INK = 'FF16213B'
@@ -101,7 +101,7 @@ const verification = (verified: boolean, source: Row['dropoff_source'], has: boo
 const rate = (v: number | null) => v
 
 /**
- * The attendance workbook: Executive Summary, Detailed Attendance (when the register is included), Programme-wise
+ * The attendance workbook: Executive Summary, Detailed Attendance (when the register is included), Class-wise
  * Report, Student-wise Summary and Notes. Every figure comes from the report document the dashboard and the PDFs use.
  * Totals are written as values, not formulas, so the file reads the same in every spreadsheet app and can't drift from
  * the on-screen report.
@@ -175,7 +175,7 @@ function summarySheet(wb: ExcelJS.Workbook, d: ReportDoc) {
   section('Enrolment')
   band = 0
   line('Students in this report', n(students), 'Expected on at least one day of the period, or with a record', '#,##0')
-  line('Programmes', n(d.programmes.length), 'Each student counted once, under their main programme', '#,##0')
+  line('Classes', n(d.programmes.length), 'Each student counted once, under their class', '#,##0')
   for (const p of d.programmes) line(`   ${p.name}`, n(p.students), `${pct(p.rate)} attendance`, '#,##0')
 
   section('Attendance')
@@ -217,8 +217,7 @@ function detailSheet(wb: ExcelJS.Workbook, d: ReportDoc) {
   const cols: Col[] = [
     { header: 'Date', width: 13, fmt: 'dd mmm yyyy' },
     { header: 'Student', width: 30, wrap: true },
-    { header: 'Programme', width: 28, wrap: true },
-    { header: 'Class', width: 14, wrap: true },
+    { header: 'Class', width: 28, wrap: true },
     { header: 'Attendance status', width: 15 },
     { header: 'Drop-off time', width: 13, align: 'right', fmt: 'h:mm AM/PM' },
     { header: 'Drop-off verification', width: 18 },
@@ -237,7 +236,7 @@ function detailSheet(wb: ExcelJS.Workbook, d: ReportDoc) {
   const rows = [...d.rows].sort((a, b) => a.day.localeCompare(b.day) || byProgrammeOrder(a.programme, b.programme) || a.child.localeCompare(b.child, 'en-IN'))
   rows.forEach((r, i) => {
     const row = body(ws, cols, [
-      new Date(`${r.day}T00:00:00Z`), text(r.child), text(r.programme), text(r.class), ATTENDANCE_LABEL[r.attendance],
+      new Date(`${r.day}T00:00:00Z`), text(r.child), text(r.class), ATTENDANCE_LABEL[r.attendance],
       asTime(r.dropoffMin), verification(r.dropoffVerified, r.dropoff_source, r.dropoff_at !== null),
       asTime(r.pickupMin), verification(r.pickupVerified, r.pickup_source, r.pickup_at !== null),
       asTime(minutesOfHhmm(r.sched_in)), asTime(minutesOfHhmm(r.sched_out)), asTime(minutesOfIso(r.pickup_announced_at)),
@@ -246,8 +245,8 @@ function detailSheet(wb: ExcelJS.Workbook, d: ReportDoc) {
       ...(d.sections.notes ? [text(r.note)] : []),
     ], i)
     const ink = STATUS_INK[r.attendance]
-    if (ink) row.getCell(5).font = { name: FONT, size: 10, bold: true, color: { argb: ink } }
-    if (r.issues.length) row.getCell(15).font = { name: FONT, size: 10, color: { argb: 'FFA3361D' } }
+    if (ink) row.getCell(4).font = { name: FONT, size: 10, bold: true, color: { argb: ink } }
+    if (r.issues.length) row.getCell(14).font = { name: FONT, size: 10, color: { argb: 'FFA3361D' } }
   })
   if (!rows.length) emptyRow(ws, cols, 'No attendance records match this report: no student was expected and nothing was recorded in this period.')
   finish(ws, cols, 2)
@@ -268,13 +267,13 @@ const GROUP_COLS: Col[] = [
 
 function programmeSheet(wb: ExcelJS.Workbook, d: ReportDoc) {
   const ws = wb.addWorksheet(SHEETS.programmes)
-  const cols: Col[] = [{ header: 'Programme', width: 34, wrap: true }, ...GROUP_COLS]
+  const cols: Col[] = [{ header: 'Class', width: 34, wrap: true }, ...GROUP_COLS]
   frame(ws, d, cols, SHEETS.programmes, 'landscape')
   d.programmes.forEach((p, i) => body(ws, cols, [text(p.name), ...groupValues(p)], i))
   if (d.programmes.length) {
     const k = d.kpis
     const c = k.counts
-    const total = body(ws, cols, ['All programmes', new Set(d.rows.map((r) => r.child_id)).size, c.present + c.late + c.absent + c.notRecorded, c.present + c.late, c.late, c.absent, c.notRecorded, rate(k.attendanceRate), k.latePickups, k.incomplete], 0, { bold: true, total: true })
+    const total = body(ws, cols, ['All classes', new Set(d.rows.map((r) => r.child_id)).size, c.present + c.late + c.absent + c.notRecorded, c.present + c.late, c.late, c.absent, c.notRecorded, rate(k.attendanceRate), k.latePickups, k.incomplete], 0, { bold: true, total: true })
     total.getCell(1).alignment = { vertical: 'top', horizontal: 'left' }
   } else emptyRow(ws, cols, 'No students in this report.')
   finish(ws, cols, 1)
@@ -285,12 +284,12 @@ function programmeSheet(wb: ExcelJS.Workbook, d: ReportDoc) {
 function studentSheet(wb: ExcelJS.Workbook, d: ReportDoc) {
   const ws = wb.addWorksheet(SHEETS.students)
   const cols: Col[] = [
-    { header: 'Student', width: 30, wrap: true }, { header: 'Programme', width: 28, wrap: true }, { header: 'Class', width: 14, wrap: true },
+    { header: 'Student', width: 30, wrap: true }, { header: 'Class', width: 28, wrap: true },
     ...GROUP_COLS.slice(1),
     { header: 'Late arrivals', width: 12, align: 'right', fmt: '#,##0' },
   ]
   frame(ws, d, cols, SHEETS.students, 'landscape')
-  d.students.forEach((s, i) => body(ws, cols, [text(s.name), text(s.programme), text(s.class), ...groupValues(s).slice(1), s.lateArrivals], i))
+  d.students.forEach((s, i) => body(ws, cols, [text(s.name), text(s.class), ...groupValues(s).slice(1), s.lateArrivals], i))
   if (!d.students.length) emptyRow(ws, cols, 'No students in this report.')
   finish(ws, cols, 1)
 }
@@ -312,13 +311,13 @@ function notesSheet(wb: ExcelJS.Workbook, d: ReportDoc) {
     ['Present', 'Checked in at the gate, marked present, or given a drop-off or pickup time by the admin.'],
     ['Late', 'A verified drop-off more than 10 minutes after the scheduled time. Late days are also counted as present.'],
     ['Absent', 'Marked absent or on leave.'],
-    ['Not recorded', 'Expected (enrolled, programme running, not a holiday) but with no attendance record. Never counted as absent.'],
+    ['Not recorded', 'Expected (enrolled, their class running, not a holiday) but with no attendance record. Never counted as absent.'],
     ['Verified drop-off / pickup', "A coordinator's Check in or Hand over at the gate (a pickup only to a registered guardian, or to a collector with their code), or an admin's correction with a reason."],
     ['Parent announcements', '"On my way", "I\'ve arrived" and the gate\'s Ready are announcements. They are shown for reference and never count as attendance.'],
     ['Incomplete', 'Present, but without a verified drop-off or pickup (today: still on campus is not incomplete).'],
     ['Over 30 days', 'Gate details are kept for 30 days: earlier days keep their recorded times only, so they are neither verified, incomplete nor late.'],
-    ['Programme', "The student's main programme. Each student is counted under one programme, so the programme-wise lines add up to the whole report."],
-    ['Expected days', "Worked out from each child's current programmes, terms and regular times: a change made since also applies to earlier days in this report."],
+    ['Class', "The student's class (their main programme), named as the school says it, e.g. Nursery Afternoon. Each student is counted under one class, so the class-wise lines add up to the whole report."],
+    ['Expected days', "Worked out from each child's current class, terms and regular times: a change made since also applies to earlier days in this report."],
     ['Times', `India Standard Time (Asia/Kolkata). Report read at ${formatTime(indiaClock(new Date(d.generatedAt)).minutes)} IST.`],
   ]
   defs.forEach(([a, b], i) => body(ws, cols, [a, b], i).getCell(1).font = { name: FONT, size: 10, bold: true, color: { argb: INK } })
